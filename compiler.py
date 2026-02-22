@@ -425,7 +425,7 @@ class Parser:
             while True:
                 p_type = self.consume()   # TYPE
                 p_name = self.consume()   # ID
-                p = Node(ARGS, p_name[1], self.peek()[2])
+                p = Node(VDEC, p_name[1], self.peek()[2])
                 p.add(Node(TYP, p_type[1], self.peek()[2]))
                 params.add(p)
 
@@ -793,6 +793,10 @@ class CodeGen:
         self.label_id = 0
         self.scopes = []
 
+        self.colors = {}  # [var_id] -> register
+        self.first_use = {}
+        self.last_use = {}
+
     def push_scope(self):
         self.scopes.append({})
 
@@ -800,7 +804,7 @@ class CodeGen:
         self.scopes.pop()
 
     def declare_var(self, name):
-        vid = self.var_id
+        vid = "v" + str(self.var_id)
         self.var_id += 1
         self.scopes[-1][name] = vid
         return vid
@@ -844,11 +848,84 @@ class CodeGen:
         if node.kind in (BLOCK, FDEC):
             self.pop_scope()
 
+    def coloring(self, node):
+
+        # get variable lifetime
+        self.compute_lifetime(node, 0, self.first_use, self.last_use)
+
+        # print(self.first_use)
+        # print(self.last_use)
+
+        # buld overlap graph
+        graph = {}  # [node] -> [neighbors list]
+        for vid in list(self.first_use.keys()):
+            fuse = self.first_use[vid]
+            luse = self.last_use[vid]
+            if vid not in graph:
+                graph[vid] = []
+            for vid2 in list(self.first_use.keys()):
+                if vid == vid2:
+                    continue
+                fuse2 = self.first_use[vid2]
+                luse2 = self.last_use[vid2]
+                if fuse2 >= fuse and fuse2 <= luse or \
+                        luse2 >= fuse and luse2 <= luse:
+                    graph[vid].append(vid2)
+                    if vid2 not in graph:
+                        graph[vid2] = []
+                    graph[vid2].append(vid)
+            
+        # coloring
+        reg_list = ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]
+        self.colors = self.color_graph(graph, reg_list)
+        # print(self.colors)
+                    
+    def color_graph(self, interference, registers):
+        """
+        interference: dict var_id -> set(var_id) (graph edges)
+        registers: list of available register names e.g. ["rax","rbx","rcx"]
+        
+        Returns: allocation: dict var_id -> register or None (if spilled)
+        """
+        allocation = {}  # var_id -> register or None (spilled)
+        
+        # Order variables by degree (optional: largest first can reduce spills)
+        var_order = sorted(interference.keys(), key=lambda v: -len(interference[v]))
+        
+        for vid in var_order:
+            # find registers used by neighbors
+            neighbor_regs = {allocation[n] for n in interference[vid] if n in allocation and allocation[n] is not None}
+            
+            # pick first free register
+            assigned = None
+            for reg in registers:
+                if reg not in neighbor_regs:
+                    assigned = reg
+                    break
+            
+            allocation[vid] = assigned  # None if all registers are taken (needs spill)
+        
+        return allocation
+
+    def compute_lifetime(self, node, time=0, first_use={}, last_use={}):
+        time += 1
+        if node.kind == VDEC:
+            first_use[node.var_id] = time
+            last_use[node.var_id] = time
+        elif node.kind == VAR:
+            last_use[node.var_id] = time
+
+        for c in node.children:
+            time = self.compute_lifetime(c, time, first_use, last_use)
+
+        return time
+
+
     def gen(self, ast):
         node = ast.root
         self.out = []
         self.identify_scope(node)
-        node.print()
+        self.coloring(node)
         self.gen_node(node)
         return "\n".join(self.out)
     
@@ -889,3 +966,4 @@ if __name__ == "__main__":
 
     print("==========ASM-GEN==========")
     CodeGen().gen(ast)
+    # ast.print()  # ast with var IDs
