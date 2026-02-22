@@ -19,6 +19,7 @@ FOR = "FOR"  # for-loop
 RETURN = "RET"
 RTYP = "R-TYPE"
 ARR = "ARRAY"  # array
+SBS = "SUB-SCRIPT"
 
 # AST tokens
 XP = "EXPR"  # expression
@@ -102,9 +103,12 @@ def tokenizer(lines):
                 op_code = PAR
                 word = c
                 index += 1
-
             elif c in "}{":
                 op_code = BRC
+                word = c
+                index += 1
+            elif c in "][":
+                op_code = SBS
                 word = c
                 index += 1
 
@@ -203,7 +207,7 @@ class Parser:
             return self.parse_literal()
 
         # identifier: variable OR function call
-        if token[0] == ID:
+        if token[0] in [ID, SBS]:
             name = token[1]
             self.consume()
 
@@ -223,6 +227,21 @@ class Parser:
                 call = Node(CALL, name)
                 call.children = args
                 return call
+            # array
+            if self.peek()[1] == '[':
+                node = Node(VAR, name)
+                
+                while self.peek()[1] == '[':
+                    self.consume()  # '['
+                    index = self.parse_expression()
+                    self.consume()  # ']'
+
+                    get = Node("GET", "index")
+                    get.add(node)
+                    get.add(index)
+                    node = get
+
+                return node
 
             # variable
             return Node(VAR, name)

@@ -15,6 +15,7 @@ void main(string argv, int argc) { ; this is the program entry point
             print("Sum of i and a:", doStuff(i, a))
         }
     } else {
-        array<float> myTab
+        array<array<float>> myTab; nested array
+        myTab[1][a * 2]
     }
 }
