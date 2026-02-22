@@ -1,3 +1,3 @@
-int fun(string a) {
-    return a
+int, float foo() {
+    return 1, .8
 }

@@ -117,7 +117,7 @@ def tokenizer(lines):
                 word = c
                 index += 1
 
-            elif c in string.digits:
+            elif c in string.digits + ".":
                 op_code = LIT
                 while c in string.digits + ".":
                     word += c
@@ -409,11 +409,13 @@ class Parser:
             
         return for_loop
     
-    def parse_fun_dec(self, type_node, name_tok):
+    def parse_fun_dec(self, type_nodes, name_tok):
         node = Node(FDEC, name_tok[1], name_tok[2])
-        if type_node is not None:
-            type_node.kind = RTYP
-            node.add(type_node)
+
+        for type_node in type_nodes:
+            if type_node is not None:
+                type_node.kind = RTYP
+                node.add(type_node)
 
         self.consume()  # '('
 
@@ -442,7 +444,6 @@ class Parser:
     
     def parse_type(self):
         tok = self.peek()
-
         # base type
         if tok[0] == TYP:
             self.consume()
@@ -476,10 +477,19 @@ class Parser:
 
     def parse_declaration(self, force_int=False):
         type_node = self.parse_type() if not force_int else Node(TYP, "int", self.peek()[2])
+        type_nodes = [type_node]
+        while self.peek()[0] in [SEP, TYP]:
+            if self.peek()[0] == TYP:
+                type_nodes.append(self.parse_type())
+            else:
+                self.consume()  # ','
+
         name_tok = self.consume()  # ID
         
         if self.peek()[1] == "(":
-            return self.parse_fun_dec(type_node, name_tok)
+            # return self.parse_fun_dec(type_nodes, name_tok)
+            node = self.parse_fun_dec(type_nodes, name_tok)
+            return node
         else:
             return self.parse_var_dec(type_node, name_tok)
     
@@ -534,6 +544,9 @@ class Node:
                 matchs.append(c)
         return matchs
     
+    def print(self):
+        print(self.to_string())
+    
     def to_string(self, depth=0, pipes=[]):
         prefix = ""
         offset = 3
@@ -576,6 +589,7 @@ class SemanticAnalyzer:
     def __init__(self, lookup_table = {}):
         self.scopes = [{}]  # stack of variable scopes
         self.functions = {}  # function_name -> {"params": [...], "ret": str}
+        self.current_return_types = None
 
     def analyze(self, ast):
         self.analyze_node(ast.root)
@@ -593,7 +607,12 @@ class SemanticAnalyzer:
         # Function declaration
         if node.kind == FDEC:
             # Return type
-            ret_type = node.get(RTYP)[0].value if node.get(RTYP) else None
+            rtypes = node.get(RTYP) if node.get(RTYP) else None
+            ret_type = None
+            if rtypes is not None:
+                ret_type = []
+                for rtype in rtypes:
+                    ret_type.append(rtype.value)
 
             # Parameter types
             params = node.get("PARAMS")[0].children if node.get("PARAMS") else []
@@ -604,13 +623,20 @@ class SemanticAnalyzer:
 
             # New scope for function body
             self.push_scope()
+
+            # Register parameters
             for p, t in zip(params, param_types):
                 self.scopes[-1][p.value] = t
 
+            # Track current function return type
+            old_return = self.current_return_types
+            self.current_return_types = ret_type
+
             for c in node.children:
-                if c.kind != RTYP and c.kind != "PARAMS":
+                if c.kind not in (RTYP, "PARAMS"):
                     self.analyze_node(c)
 
+            self.current_return_types = old_return
             self.pop_scope()
             return
         
@@ -652,16 +678,16 @@ class SemanticAnalyzer:
                 for t in child_types[1:]:
                     if t != base_type:
                         raise Exception(
-                            self.msg_error(node, f"TypeError: Invalid '{node.kind}' with types '{child_types}'")
+                            self.msg_error(node, f"TypeError: Invalid '{node.value}' with types '{child_types}'")
                         )
 
         if node.kind == VDEC:
             child_type = self.get_type(node.children[-1])
             base_type = node.children[0].value
-            if child_type != base_type:
+            if child_type != base_type and child_type is not None:
                 raise Exception(
                     self.msg_error(node,
-                        f"TypeError: Invalid initialization for '{base_type}' with type '{child_types}'")
+                        f"TypeError: Invalid initialization for '{base_type}' with type '{child_type}'")
                 )
 
         # Function call argument type check
@@ -683,6 +709,31 @@ class SemanticAnalyzer:
                         self.msg_error(node,
                             f"TypeError: Function '{node.value}' expects {expected} for argument #{i+1}, got {arg_type}")
                     )
+        
+        if node.kind == RETURN:
+            if self.current_return_types is None:
+                raise Exception(self.msg_error(node, "Return outside of function"))
+
+            if len(node.children) == 0:
+                if self.current_return_types != ["void"]:
+                    raise Exception(
+                        self.msg_error(node,
+                            f"TypeError: Function must return '{self.current_return_types}', got void")
+                    )
+            else:
+                if len(self.current_return_types) != len(node.children):
+                    raise Exception(
+                        self.msg_error(node,
+                            f"InvalidArgCount: Function returns {len(self.current_return_types)} values, got {len(node.children)}")
+                    )
+                else:
+                    for i in range(len(self.current_return_types)):
+                        ret_type = self.get_type(node.children[i])
+                        if ret_type != self.current_return_types[i]:
+                            raise Exception(
+                                self.msg_error(node,
+                                    f"TypeError: Function returns '{self.current_return_types}', got '{ret_type}' at #{i+1}")
+                            )
     
     def lookup_variable_type(self, name):
         for scope in reversed(self.scopes):
@@ -702,7 +753,6 @@ class SemanticAnalyzer:
 
     def get_type(self, node):
         if node.kind == NUM:
-            print(node, '.' in node.value)
             return "float" if '.' in node.value else "int"
         
         elif node.kind == STRING:
@@ -722,7 +772,10 @@ class SemanticAnalyzer:
         
         elif node.kind == CALL:
             if node.value in self.functions:
-                return self.functions[node.value]["ret"]
+                rtypes = self.functions[node.value]["ret"]
+                if len(rtypes) == 1:
+                    rtypes = rtypes[0]
+                return rtypes
             else:
                 raise Exception(self.msg_error(node, f": Call to unknown function '{node.value}'"))
             
