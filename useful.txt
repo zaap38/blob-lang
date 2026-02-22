@@ -1,0 +1,8 @@
+# path to nasm.exe
+h
+
+# check nasm installed
+nasm.exe --version
+
+# use nasm to create a .bin from .asm
+nasm -f bin FILE.asm -o FILE.bin
