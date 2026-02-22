@@ -1,24 +1,20 @@
 
-/*
-    for loop that sums integers for 1 to n
-    if total is greater than 5, print "success"
-*/
-
-#define THR 5
-
-int sumIntegers(int n) {
-    int total = 0; this is a comment
-    for i = 1, n {
-        total += i
-    }
-    return total
+int doStuff(int a, int b) {
+    return a + b, 0
 }
 
-void main() {
+void main(string argv, int argc) {
 
-    if THR < sumIntegers().print() {
-        "success".print()
+    int a = 5
+    int b
+    b = someFunction(a * 3)
+    a++
+    --b
+    if a > b {
+        for i = 0, 10, i = i + 1 {
+            print("Sum of i and a:", doStuff(i, a))
+        }
     } else {
-        "bad".print()
+        7
     }
 }
