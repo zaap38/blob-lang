@@ -119,12 +119,14 @@ def tokenizer(lines):
 
             elif c in string.digits:
                 op_code = LIT
-                while c in string.digits:
+                while c in string.digits + ".":
                     word += c
                     index += 1
                     if index >= len(line):
                         break
                     c = line[index]
+                if word[0] == ".":
+                    word = "0" + word
 
             elif c in ["\n"]:
                 op_code = NL
@@ -377,7 +379,7 @@ class Parser:
 
         head = Node("HEAD")
 
-        init_var = self.parse_affectation()
+        init_var = self.parse_declaration(True)
         init_block = Node("INIT", "", op[2])
         init_block.add(init_var)
         head.add(init_block)
@@ -445,6 +447,7 @@ class Parser:
         if tok[0] == TYP:
             self.consume()
             return Node(TYP, tok[1], tok[2])
+        
         # array type
         if tok[0] == ARR:
             self.consume()              # consume 'array'
@@ -471,10 +474,10 @@ class Parser:
 
         return node
 
-    def parse_declaration(self):
-        type_node = self.parse_type()
+    def parse_declaration(self, force_int=False):
+        type_node = self.parse_type() if not force_int else Node(TYP, "int", self.peek()[2])
         name_tok = self.consume()  # ID
-
+        
         if self.peek()[1] == "(":
             return self.parse_fun_dec(type_node, name_tok)
         else:
@@ -610,6 +613,22 @@ class SemanticAnalyzer:
 
             self.pop_scope()
             return
+        
+        if node.kind == FOR:
+            head = node.get("HEAD")[0]
+
+            # Loop variable is declared automatically as int
+            init_node = head.get("INIT")[0]
+            if init_node.kind == BOP and init_node.value == "=" and init_node.children[0].kind == VAR:
+                loop_var = init_node.children[0].value
+                self.scopes[-1][loop_var] = "int"  # declare loop variable as int
+
+            # Analyze the rest of the loop in a new scope
+            self.push_scope()
+            for c in node.children:
+                self.analyze_node(c)
+            self.pop_scope()
+            return 
 
         # Variable declaration
         if node.kind == VDEC:
@@ -625,6 +644,7 @@ class SemanticAnalyzer:
 
     def verify(self, node):
         # Type-check binary operations
+
         if node.kind == BOP:
             child_types = [self.get_type(c) for c in node.children]
             if len(child_types) >= 2:
@@ -632,28 +652,36 @@ class SemanticAnalyzer:
                 for t in child_types[1:]:
                     if t != base_type:
                         raise Exception(
-                            RED + f"At line {node.line_no}: TypeError: Invalid {node.kind} with types {child_types}" + ENDCOLOR
+                            self.msg_error(node, f"TypeError: Invalid '{node.kind}' with types '{child_types}'")
                         )
+
+        if node.kind == VDEC:
+            child_type = self.get_type(node.children[-1])
+            base_type = node.children[0].value
+            if child_type != base_type:
+                raise Exception(
+                    self.msg_error(node,
+                        f"TypeError: Invalid initialization for '{base_type}' with type '{child_types}'")
+                )
 
         # Function call argument type check
         if node.kind == CALL:
             if node.value not in self.functions:
-                raise Exception(RED + f"At line {node.line_no}: UndefinedError: Call to undefined function \
-                                {node.value}" + ENDCOLOR)
+                raise Exception(self.msg_error(node, f"Call to undefined function '{node.value}'"))
             sig = self.functions[node.value]
             expected_params = sig["params"]
             actual_args = node.children
             if len(expected_params) != len(actual_args):
                 raise Exception(
-                    RED + f"At line {node.line_no}: Function {node.value} expects {len(expected_params)} args \
-                        , got {len(actual_args)}" + ENDCOLOR
+                    self.msg_error(node,
+                        f"Function '{node.value}' expects {len(expected_params)} args, got {len(actual_args)}")
                 )
             for i, (expected, arg_node) in enumerate(zip(expected_params, actual_args)):
                 arg_type = self.get_type(arg_node)
                 if arg_type != expected:
                     raise Exception(
-                        RED + f"At line {node.line_no}: TypeError in call {node.value}: argument {i+1} expected \
-                            {expected}, got {arg_type}" + ENDCOLOR
+                        self.msg_error(node,
+                            f"TypeError: Function '{node.value}' expects {expected} for argument #{i+1}, got {arg_type}")
                     )
     
     def lookup_variable_type(self, name):
@@ -669,28 +697,35 @@ class SemanticAnalyzer:
         self.scopes.pop()
 
     def msg_error(self, node, msg):
-        return RED + "At line" + YELLOW + " " + str(node.line_no) + RED + \
+        return RED + "At line" + YELLOW + " " + str(node.line_no) + RED + " " + \
                                 msg + ENDCOLOR
 
     def get_type(self, node):
         if node.kind == NUM:
+            print(node, '.' in node.value)
             return "float" if '.' in node.value else "int"
+        
         elif node.kind == STRING:
             return "string"
+        
         elif node.kind == VAR:
             var_type = self.lookup_variable_type(node.value)
             if var_type is None:
                 raise Exception(self.msg_error(node, f": Undeclared variable '{node.value}'"))
             return var_type
+        
         elif node.kind == UOP:
             return self.get_type(node.children[0])
+        
         elif node.kind == BOP:
             return self.get_type(node.children[0])
+        
         elif node.kind == CALL:
             if node.value in self.functions:
                 return self.functions[node.value]["ret"]
             else:
                 raise Exception(self.msg_error(node, f": Call to unknown function '{node.value}'"))
+            
         return None
 
 
