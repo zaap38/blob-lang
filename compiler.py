@@ -17,6 +17,8 @@ CMT = "CMT"  # comment
 ITE = "IF-ELSE"  # if-then-else
 FOR = "FOR"  # for-loop
 RETURN = "RET"
+RTYP = "R-TYPE"
+ARR = "ARRAY"  # array
 
 # AST tokens
 XP = "EXPR"  # expression
@@ -34,6 +36,7 @@ BLOCK = "BLOCK"
 BLUE = "\033[96m"
 YELLOW = "\033[93m"
 ENDCOLOR = "\033[0m"
+
 
 def tokenizer(lines):
 
@@ -56,13 +59,16 @@ def tokenizer(lines):
                     if index >= len(line):
                         break
                     c = line[index]
-                if word in ["void", "int", "string", "bool", "array"]:
+
+                if word in ["void", "int", "float", "string", "bool"]:
                     op_code = TYP
+                elif word == "array":
+                    op_code = ARR
                 elif word in ["if", "else"]:
                     op_code = ITE
-                elif word in ["for"]:
+                elif word == "for":
                     op_code = FOR
-                elif word in ["return"]:
+                elif word == "return":
                     op_code = RETURN
                 else:
                     op_code = ID
@@ -75,6 +81,8 @@ def tokenizer(lines):
                     if index >= len(line):
                         break
                     c = line[index]
+                    if word[0] in "<>":
+                        break
 
             elif c in ",":
                 op_code = SEP
@@ -370,9 +378,11 @@ class Parser:
             
         return for_loop
     
-    def parse_fun_dec(self, type_tok, name_tok):
+    def parse_fun_dec(self, type_node, name_tok):
         node = Node(FDEC, name_tok[1])
-        node.add(Node("RET_TYPE", type_tok[1]))
+        if type_node is not None:
+            type_node.kind = RTYP
+            node.add(type_node)
 
         self.consume()  # '('
 
@@ -399,43 +409,61 @@ class Parser:
 
         return node
     
-    def parse_var_dec(self, type_tok, name_tok):
-        node = Node(VDEC, name_tok[1])
-        node.add(Node(TYP, type_tok[1]))
+    def parse_type(self):
+        tok = self.peek()
 
-        # optional initializer
+        # base type
+        if tok[0] == TYP:
+            self.consume()
+            return Node(TYP, tok[1])
+        # array type
+        print(tok)
+        if tok[0] == ARR:
+            self.consume()              # consume 'array'
+            if self.peek()[1] != "<":
+                raise SyntaxError("Expected '<' after array")
+            self.consume()              # consume '<'
+            inner = self.parse_type()   # parse inner type
+            if self.peek()[1] != ">":
+                raise SyntaxError("Expected '>' after array type")
+            self.consume()              # consume '>'
+            node = Node(TYP, ARR)
+            node.add(inner)
+            return node
+
+        return None
+    
+    def parse_var_dec(self, type_node, name_tok):
+        node = Node(VDEC, name_tok[1])
+        node.add(type_node)
+
         if self.peek()[1] == "=":
-            self.consume()  # =
-            expr = self.parse_comparison()
-            node.add(expr)
+            self.consume()
+            node.add(self.parse_comparison())
 
         return node
 
     def parse_declaration(self):
-        type_tok = self.consume()  # TYPE
+        type_node = self.parse_type()
         name_tok = self.consume()  # ID
 
-        # function declaration
         if self.peek()[1] == "(":
-            return self.parse_fun_dec(type_tok, name_tok)
-
-        # variable declaration
-        return self.parse_var_dec(type_tok, name_tok)
+            return self.parse_fun_dec(type_node, name_tok)
+        else:
+            return self.parse_var_dec(type_node, name_tok)
     
     def parse_statement(self):
         tok = self.peek()
 
         # variable or function declaration
-        if tok[0] == TYP:
+        if tok[0] in [TYP, ARR]:
             return self.parse_declaration()
-        
         # if then else
         elif tok[0] == ITE:
             return self.parse_ifthenelse()
-        
+        # for loop
         elif tok[0] == FOR:
             return self.parse_forloop()
-
         # otherwise: expression statement
         return self.parse_newline()
         
@@ -462,7 +490,7 @@ class Node:
         self.children = []
 
     def __str__(self):
-        return str(tuple([self.kind, self.value]))
+        return "Node=" + str(tuple([self.kind, self.value]))
     
     def add(self, node):
         assert node is not None

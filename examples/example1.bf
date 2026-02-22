@@ -15,6 +15,6 @@ void main(string argv, int argc) { ; this is the program entry point
             print("Sum of i and a:", doStuff(i, a))
         }
     } else {
-        7
+        array<float> myTab
     }
 }
