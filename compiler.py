@@ -6,6 +6,7 @@ import string
 ID = "ID"  # identifier
 OP = "OP"  # operator
 NUM = "NUM"  # number
+STRING = "STR"
 LIT = "LIT"  # literal
 TAB = "INDENT"  # indentation
 NL = "NLINE"  # new line
@@ -36,6 +37,8 @@ BLOCK = "BLOCK"
 
 BLUE = "\033[96m"
 YELLOW = "\033[93m"
+GREEN = "\033[92m"
+RED = "\033[91m"
 ENDCOLOR = "\033[0m"
 
 
@@ -196,7 +199,10 @@ class Parser:
         token = self.peek()
         if token[0] == LIT:
             self.consume()
-            return Node(LIT, token[1])
+            if token[1][0] in string.digits:
+                return Node(NUM, token[1])
+            else:
+                return Node(STRING, token[1])
         return None
     
     def parse_factor(self):
@@ -513,6 +519,13 @@ class Node:
     def add(self, node):
         assert node is not None
         self.children.append(node)
+
+    def get(self, c_type):
+        matchs = []
+        for c in self.children:
+            if c.kind == c_type:
+                matchs.append(c)
+        return matchs
     
     def to_string(self, depth=0, pipes=[]):
         prefix = ""
@@ -550,7 +563,81 @@ class Node:
                 p = lprefix
             child_text += p + c.to_string(depth + 1 + offset, pipes)
         return name + child_text
+
+
+class SemanticAnalyzer:
+
+    def __init__(self, lookup_table = {}):
+        self.declared = dict()
+        self.lookup_table = lookup_table
+
+    def analyze(self, ast):
+        self.analyze_node(ast.root)
+        print(GREEN + "Type-checking done!" + ENDCOLOR)
+
+    def analyze_node(self, ast_node):
+
+        if ast_node.kind in [VDEC, FDEC]:
+            if ast_node.kind == VDEC:
+                self.lookup_table[ast_node.value] = ast_node.get(TYP)[0].value
+            else:
+                self.lookup_table[ast_node.value] = ast_node.get(RTYP)[0].value
+        
+        types = []
+        for c in ast_node.children:
+            t = SemanticAnalyzer(self.lookup_table).analyze_node(c)
+            if t is not None:
+                types.append(t)
+        self.verify(ast_node)
+        return self.get_type(ast_node)
+
+    def verify(self, ast_node):
+        kind = ast_node.kind
+        value = ast_node.value
+        children = ast_node.children
+
+        type_c = None
+        c_t = []
+        for c in children:
+            type_c = self.get_type(c)
+            if type_c is not None:
+                c_t.append(type_c)
+
+        if ast_node.kind == BOP:
+            for t in c_t:
+                if t != c_t[0]:
+                    raise Exception(RED + "TypeError: Invalid " + str(ast_node) + \
+                                    " with " + str(c_t) + "!" + ENDCOLOR)
     
+    def lookup_variable_type(self, name):
+        if name in self.lookup_table:
+            return self.lookup_table[name]
+        return None
+
+    def get_type(self, node):
+
+        if node.kind == NUM:
+            if node.value[-1] != '.' and '.' in node.value:
+                return "float"
+            else:
+                return "int"
+            
+        elif node.kind == STRING:
+            return "string"
+        
+        elif node.kind == VAR:
+            return self.lookup_variable_type(node.value)
+
+        elif node.kind == UOP:
+            return self.get_type(node.children[0])
+
+        elif node.kind == BOP:
+            return self.get_type(node.children[0])
+        
+        elif node.kind == CALL:
+            return self.lookup_variable_type(node.value)
+
+        return None
 
 if __name__ == "__main__":
     program_path = sys.argv[1]
@@ -572,7 +659,8 @@ if __name__ == "__main__":
                    for code in codes]))
 
     print("==========AST==========")
-    # ast = AST(codes)
-    # ast.print()
     ast = Parser().parse(codes)
     ast.print()
+
+    print("==========TYPE-CHECKING==========")
+    SemanticAnalyzer().analyze(ast)
