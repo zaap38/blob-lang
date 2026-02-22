@@ -45,8 +45,10 @@ ENDCOLOR = "\033[0m"
 def tokenizer(lines):
 
     codes = []
+    line_no = 0
 
     for line in lines:
+        line_no += 1
         if line == "\n":
             continue
         # print("Line:", line[:-1])
@@ -157,7 +159,7 @@ def tokenizer(lines):
                 index += 1
 
             if op_code not in [None, CMT]:
-                codes.append((op_code, word))
+                codes.append((op_code, word, line_no))
 
             if index >= len(line):
                 break
@@ -200,9 +202,9 @@ class Parser:
         if token[0] == LIT:
             self.consume()
             if token[1][0] in string.digits:
-                return Node(NUM, token[1])
+                return Node(NUM, token[1], token[2])
             else:
-                return Node(STRING, token[1])
+                return Node(STRING, token[1], token[2])
         return None
     
     def parse_factor(self):
@@ -230,19 +232,19 @@ class Parser:
 
                 self.consume()  # consume ')'
 
-                call = Node(CALL, name)
+                call = Node(CALL, name, token[2])
                 call.children = args
                 return call
             # array
             if self.peek()[1] == '[':
-                node = Node(VAR, name)
+                node = Node(VAR, name, token[2])
                 
                 while self.peek()[1] == '[':
                     self.consume()  # '['
                     index = self.parse_expression()
                     self.consume()  # ']'
 
-                    get = Node("GET", "index")
+                    get = Node("GET", "index", token[2])
                     get.add(node)
                     get.add(index)
                     node = get
@@ -250,7 +252,7 @@ class Parser:
                 return node
 
             # variable
-            return Node(VAR, name)
+            return Node(VAR, name, token[2])
 
         # parenthesized expression
         if token[1] == "(":
@@ -264,7 +266,7 @@ class Parser:
         while self.peek()[1] in ("*", "/"):
             op = self.consume()
             right = self.parse_factor()
-            new = Node(BOP, op[1])
+            new = Node(BOP, op[1], op[2])
             new.children = [node, right]
             node = new
         return node
@@ -274,7 +276,7 @@ class Parser:
         while self.peek()[1] in ("+", "-"):
             op = self.consume()
             right = self.parse_term()
-            new = Node(BOP, op[1])
+            new = Node(BOP, op[1], op[2])
             new.children = [node, right]
             node = new
         return node
@@ -284,7 +286,7 @@ class Parser:
         while self.peek()[1] in ("<", ">", "<=", ">=", "==", "!="):
             op = self.consume()
             right = self.parse_expression()
-            new = Node(BOP, op[1])
+            new = Node(BOP, op[1], op[2])
             new.children = [node, right]
             node = new
         return node
@@ -296,10 +298,10 @@ class Parser:
             new = None
             right = self.parse_comparison()
             if op[1] == "=":
-                new = Node(BOP, op[1])
+                new = Node(BOP, op[1], op[2])
                 new.children = [node, right]
             else:
-                new = Node(UOP, op[1])
+                new = Node(UOP, op[1], op[2])
                 if right is not None and right.kind == VAR:
                     new.children = [right]
                 else:
@@ -308,7 +310,7 @@ class Parser:
         return node
     
     def parse_return(self):
-        node = Node(RETURN)
+        node = Node(RETURN, "", self.peek()[2])
         ret_node = self.parse_comparison()
         while ret_node is not None:
             node.add(ret_node)
@@ -330,7 +332,7 @@ class Parser:
         return node
     
     def parse_block(self, name=""):
-        block = Node(BLOCK, name)
+        block = Node(BLOCK, name, self.peek()[2])
         open_count = 0
         if self.peek()[1] == '{':
             self.consume()
@@ -351,9 +353,9 @@ class Parser:
     def parse_ifthenelse(self):
         
         op = self.consume()
-        if_then_else = Node(op[0], "if-then-else")
+        if_then_else = Node(op[0], "if-then-else", op[2])
 
-        if_then_else.add(Node("COND", "if"))
+        if_then_else.add(Node("COND", "if", op[2]))
         ifblock = if_then_else.children[-1]
 
         cond = self.parse_comparison()
@@ -371,28 +373,30 @@ class Parser:
     
     def parse_forloop(self):
         op = self.consume()
-        for_loop = Node(op[0], "for-loop")
+        for_loop = Node(op[0], "for-loop", op[2])
 
         head = Node("HEAD")
 
         init_var = self.parse_affectation()
-        init_block = Node("INIT")
+        init_block = Node("INIT", "", op[2])
         init_block.add(init_var)
         head.add(init_block)
 
         self.consume()  # ','
 
         limit_node = self.parse_expression()
-        limit_block = Node("LIMIT")
+        limit_block = Node("LIMIT", "", op[2])
         limit_block.add(limit_node)
         head.add(limit_block)
 
-        increment_node = Node(LIT, '1')
+        increment_node = Node(LIT, '1', op[2])
+        default = True
         if self.peek()[1] == ',':
+            default = False
             self.consume()  # ','
             increment_node = self.parse_affectation()
         
-        increment_block = Node("INCREMENT")
+        increment_block = Node("INCREMENT", "default" if default else "", op[2])
         increment_block.add(increment_node)
         head.add(increment_block)
 
@@ -404,7 +408,7 @@ class Parser:
         return for_loop
     
     def parse_fun_dec(self, type_node, name_tok):
-        node = Node(FDEC, name_tok[1])
+        node = Node(FDEC, name_tok[1], name_tok[2])
         if type_node is not None:
             type_node.kind = RTYP
             node.add(type_node)
@@ -412,13 +416,13 @@ class Parser:
         self.consume()  # '('
 
         # parameters
-        params = Node("PARAMS")
+        params = Node("PARAMS", "", self.peek()[2])
         if self.peek()[1] != ")":
             while True:
                 p_type = self.consume()   # TYPE
                 p_name = self.consume()   # ID
-                p = Node(ARGS, p_name[1])
-                p.add(Node(TYP, p_type[1]))
+                p = Node(ARGS, p_name[1], self.peek()[2])
+                p.add(Node(TYP, p_type[1], self.peek()[2]))
                 params.add(p)
 
                 if self.peek()[1] != ",":
@@ -440,7 +444,7 @@ class Parser:
         # base type
         if tok[0] == TYP:
             self.consume()
-            return Node(TYP, tok[1])
+            return Node(TYP, tok[1], tok[2])
         # array type
         if tok[0] == ARR:
             self.consume()              # consume 'array'
@@ -451,14 +455,14 @@ class Parser:
             if self.peek()[1] != ">":
                 raise SyntaxError("Expected '>' after array type")
             self.consume()              # consume '>'
-            node = Node(TYP, ARR)
+            node = Node(TYP, ARR, tok[2])
             node.add(inner)
             return node
 
         return None
     
     def parse_var_dec(self, type_node, name_tok):
-        node = Node(VDEC, name_tok[1])
+        node = Node(VDEC, name_tok[1], name_tok[2])
         node.add(type_node)
 
         if self.peek()[1] == "=":
@@ -506,11 +510,11 @@ class Tree:
 
 class Node:
 
-    def __init__(self, kind=None, value=None, info=""):
+    def __init__(self, kind=None, value=None, line_no=0):
         assert type(kind) != tuple
         self.kind = kind
         self.value = value
-        self.info = info
+        self.line_no = line_no
         self.children = []
 
     def __str__(self):
@@ -550,8 +554,7 @@ class Node:
                 name += ':'
             else:
                 pipes.pop(-1)
-            if self.info != "":
-                name += '  # ' + self.info
+            name += GREEN + "  # " + str(self.line_no) + ENDCOLOR
             name += "\n"
         child_text = ""
         for i, c in enumerate(self.children):
@@ -568,76 +571,128 @@ class Node:
 class SemanticAnalyzer:
 
     def __init__(self, lookup_table = {}):
-        self.declared = dict()
-        self.lookup_table = lookup_table
+        self.scopes = [{}]  # stack of variable scopes
+        self.functions = {}  # function_name -> {"params": [...], "ret": str}
 
     def analyze(self, ast):
         self.analyze_node(ast.root)
         print(GREEN + "Type-checking done!" + ENDCOLOR)
 
-    def analyze_node(self, ast_node):
+    def analyze_node(self, node):
+        # New scope for functions or blocks
+        if node.kind == BLOCK:
+            self.push_scope()
+            for c in node.children:
+                self.analyze_node(c)
+            self.pop_scope()
+            return
 
-        if ast_node.kind in [VDEC, FDEC]:
-            if ast_node.kind == VDEC:
-                self.lookup_table[ast_node.value] = ast_node.get(TYP)[0].value
-            else:
-                self.lookup_table[ast_node.value] = ast_node.get(RTYP)[0].value
-        
-        types = []
-        for c in ast_node.children:
-            t = SemanticAnalyzer(self.lookup_table).analyze_node(c)
-            if t is not None:
-                types.append(t)
-        self.verify(ast_node)
-        return self.get_type(ast_node)
+        # Function declaration
+        if node.kind == FDEC:
+            # Return type
+            ret_type = node.get(RTYP)[0].value if node.get(RTYP) else None
 
-    def verify(self, ast_node):
-        kind = ast_node.kind
-        value = ast_node.value
-        children = ast_node.children
+            # Parameter types
+            params = node.get("PARAMS")[0].children if node.get("PARAMS") else []
+            param_types = [p.get(TYP)[0].value for p in params]
 
-        type_c = None
-        c_t = []
-        for c in children:
-            type_c = self.get_type(c)
-            if type_c is not None:
-                c_t.append(type_c)
+            # Save function signature
+            self.functions[node.value] = {"params": param_types, "ret": ret_type}
 
-        if ast_node.kind == BOP:
-            for t in c_t:
-                if t != c_t[0]:
-                    raise Exception(RED + "TypeError: Invalid " + str(ast_node) + \
-                                    " with " + str(c_t) + "!" + ENDCOLOR)
+            # New scope for function body
+            self.push_scope()
+            for p, t in zip(params, param_types):
+                self.scopes[-1][p.value] = t
+
+            for c in node.children:
+                if c.kind != RTYP and c.kind != "PARAMS":
+                    self.analyze_node(c)
+
+            self.pop_scope()
+            return
+
+        # Variable declaration
+        if node.kind == VDEC:
+            var_type = node.get(TYP)[0].value
+            self.scopes[-1][node.value] = var_type
+
+        # Recursively analyze children first
+        for c in node.children:
+            self.analyze_node(c)
+
+        # Verify operations
+        self.verify(node)
+
+    def verify(self, node):
+        # Type-check binary operations
+        if node.kind == BOP:
+            child_types = [self.get_type(c) for c in node.children]
+            if len(child_types) >= 2:
+                base_type = child_types[0]
+                for t in child_types[1:]:
+                    if t != base_type:
+                        raise Exception(
+                            RED + f"At line {node.line_no}: TypeError: Invalid {node.kind} with types {child_types}" + ENDCOLOR
+                        )
+
+        # Function call argument type check
+        if node.kind == CALL:
+            if node.value not in self.functions:
+                raise Exception(RED + f"At line {node.line_no}: UndefinedError: Call to undefined function \
+                                {node.value}" + ENDCOLOR)
+            sig = self.functions[node.value]
+            expected_params = sig["params"]
+            actual_args = node.children
+            if len(expected_params) != len(actual_args):
+                raise Exception(
+                    RED + f"At line {node.line_no}: Function {node.value} expects {len(expected_params)} args \
+                        , got {len(actual_args)}" + ENDCOLOR
+                )
+            for i, (expected, arg_node) in enumerate(zip(expected_params, actual_args)):
+                arg_type = self.get_type(arg_node)
+                if arg_type != expected:
+                    raise Exception(
+                        RED + f"At line {node.line_no}: TypeError in call {node.value}: argument {i+1} expected \
+                            {expected}, got {arg_type}" + ENDCOLOR
+                    )
     
     def lookup_variable_type(self, name):
-        if name in self.lookup_table:
-            return self.lookup_table[name]
-        return None
+        for scope in reversed(self.scopes):
+            if name in scope:
+                return scope[name]
+        return None  # not found
+    
+    def push_scope(self):
+        self.scopes.append({})
+
+    def pop_scope(self):
+        self.scopes.pop()
+
+    def msg_error(self, node, msg):
+        return RED + "At line" + YELLOW + " " + str(node.line_no) + RED + \
+                                msg + ENDCOLOR
 
     def get_type(self, node):
-
         if node.kind == NUM:
-            if node.value[-1] != '.' and '.' in node.value:
-                return "float"
-            else:
-                return "int"
-            
+            return "float" if '.' in node.value else "int"
         elif node.kind == STRING:
             return "string"
-        
         elif node.kind == VAR:
-            return self.lookup_variable_type(node.value)
-
+            var_type = self.lookup_variable_type(node.value)
+            if var_type is None:
+                raise Exception(self.msg_error(node, f": Undeclared variable '{node.value}'"))
+            return var_type
         elif node.kind == UOP:
             return self.get_type(node.children[0])
-
         elif node.kind == BOP:
             return self.get_type(node.children[0])
-        
         elif node.kind == CALL:
-            return self.lookup_variable_type(node.value)
-
+            if node.value in self.functions:
+                return self.functions[node.value]["ret"]
+            else:
+                raise Exception(self.msg_error(node, f": Call to unknown function '{node.value}'"))
         return None
+
 
 if __name__ == "__main__":
     program_path = sys.argv[1]
@@ -654,8 +709,9 @@ if __name__ == "__main__":
 
     print("Codes:")
     # print("\n".join([str(code) for code in codes]))
-    print("".join(["" + code[0] + " '" + code[1].replace("\n", "\\n")
-                                                  .replace("\t", "\\t") + "'| "
+    print("".join([BLUE + code[0] + ENDCOLOR + " '" + YELLOW + code[1].replace("\n", "\\n")
+                                                  .replace("\t", "\\t") + ENDCOLOR + \
+                                                    "' (" + GREEN + str(code[2]) +  ENDCOLOR + ")| "
                    for code in codes]))
 
     print("==========AST==========")
