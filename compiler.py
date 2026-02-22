@@ -377,7 +377,7 @@ class Parser:
         op = self.consume()
         for_loop = Node(op[0], "for-loop", op[2])
 
-        head = Node("HEAD")
+        head = Node("HEAD", "", op[2])
 
         init_var = self.parse_declaration(True)
         init_block = Node("INIT", "", op[2])
@@ -528,6 +528,7 @@ class Node:
         self.kind = kind
         self.value = value
         self.line_no = line_no
+        self.var_id = 0
         self.children = []
 
     def __str__(self):
@@ -565,7 +566,10 @@ class Node:
         name = ""
         code = (self.kind, self.value)
         if code is not None:
-            name = BLUE + str(code[0]) + ENDCOLOR + '<' + YELLOW + str(code[1]) + ENDCOLOR + '>'
+            text_value = str(code[1])
+            if self.kind in [VAR, VDEC] and self.var_id != 0:
+                text_value = text_value + "{" + RED + str(self.var_id) + YELLOW + "}"
+            name = BLUE + str(code[0]) + ENDCOLOR + '<' + YELLOW + text_value + ENDCOLOR + '>'
             if len(self.children) > 0:
                 name += ':'
             else:
@@ -782,6 +786,80 @@ class SemanticAnalyzer:
         return None
 
 
+class CodeGen:
+
+    def __init__(self):
+        self.var_id = 0
+        self.label_id = 0
+        self.scopes = []
+
+    def push_scope(self):
+        self.scopes.append({})
+
+    def pop_scope(self):
+        self.scopes.pop()
+
+    def declare_var(self, name):
+        vid = self.var_id
+        self.var_id += 1
+        self.scopes[-1][name] = vid
+        return vid
+
+    def lookup_var(self, name):
+        for scope in reversed(self.scopes):
+            if name in scope:
+                return scope[name]
+        raise Exception(f"Undeclared variable '{name}'")
+
+    def identify_scope(self, node):
+        # enter new scope for blocks and functions
+        if node.kind in (BLOCK, FDEC):
+            self.push_scope()
+
+            # if function: declare parameters
+            if node.kind == FDEC:
+                params = node.get("PARAMS")
+                if params:
+                    for p in params[0].children:
+                        name = p.value
+                        vid = self.declare_var(name)
+                        p.var_id = vid   # tag parameter node
+
+        # variable declaration (int a = 5)
+        if node.kind == VDEC:
+            name = node.value
+            vid = self.declare_var(name)
+            node.var_id = vid
+
+        # variable usage (a = a + 1)
+        if node.kind == VAR:
+            vid = self.lookup_var(node.value)
+            node.var_id = vid
+
+        # recurse
+        for c in node.children:
+            self.identify_scope(c)
+
+        # leave scope
+        if node.kind in (BLOCK, FDEC):
+            self.pop_scope()
+
+    def gen(self, ast):
+        node = ast.root
+        self.out = []
+        self.identify_scope(node)
+        node.print()
+        self.gen_node(node)
+        return "\n".join(self.out)
+    
+    def gen_node(self, node):
+        pass
+
+    def add_label(self):
+        self.label_id += 1
+        self.out.append("Label-" + str(self.label_id) + ":")
+
+
 if __name__ == "__main__":
     program_path = sys.argv[1]
     print("Compiling", "\"" + program_path + "\"")
@@ -808,3 +886,6 @@ if __name__ == "__main__":
 
     print("==========TYPE-CHECKING==========")
     SemanticAnalyzer().analyze(ast)
+
+    print("==========ASM-GEN==========")
+    CodeGen().gen(ast)
