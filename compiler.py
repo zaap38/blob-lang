@@ -417,7 +417,6 @@ class Parser:
             self.consume()
             return Node(TYP, tok[1])
         # array type
-        print(tok)
         if tok[0] == ARR:
             self.consume()              # consume 'array'
             if self.peek()[1] != "<":
