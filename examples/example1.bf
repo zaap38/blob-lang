@@ -1,9 +1,9 @@
-
+; example 1 - this is a comment
 int doStuff(int a, int b) {
     return a + b, 0
 }
 
-void main(string argv, int argc) {
+void main(string argv, int argc) { ; this is the program entry point
 
     int a = 5
     int b

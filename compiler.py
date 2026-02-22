@@ -13,6 +13,7 @@ TYP = "TYPE"  # type
 PAR = "PAR"  # parenthesis
 BRC = "BRC"  # braces
 SEP = "SEP"  # separator
+CMT = "CMT"  # comment
 ITE = "IF-ELSE"  # if-then-else
 FOR = "FOR"  # for-loop
 RETURN = "RET"
@@ -75,10 +76,19 @@ def tokenizer(lines):
                         break
                     c = line[index]
 
-            elif c in ",;":
+            elif c in ",":
                 op_code = SEP
                 word = c
                 index += 1
+
+            elif c in ";":
+                op_code = CMT
+                while c != NL:
+                    word += c
+                    index += 1
+                    if index >= len(line):
+                        break
+                    c = line[index]
 
             elif c in "()":
                 op_code = PAR
@@ -131,7 +141,7 @@ def tokenizer(lines):
             else:
                 index += 1
 
-            if op_code is not None:
+            if op_code not in [None, CMT]:
                 codes.append((op_code, word))
 
             if index >= len(line):
@@ -197,7 +207,6 @@ class Parser:
                 if self.peek()[1] != ")":
                     args.append(self.parse_expression())
                     while self.peek()[1] == ",":
-                        # print(self.peek())
                         self.consume()
                         args.append(self.parse_expression())
 
@@ -238,7 +247,6 @@ class Parser:
         return node
     
     def parse_comparison(self):
-        # print(">>>", self.pos, self.peek())
         node = self.parse_expression()
         while self.peek()[1] in ("<", ">", "<=", ">=", "==", "!="):
             op = self.consume()
@@ -254,18 +262,14 @@ class Parser:
             op = self.consume()
             new = None
             right = self.parse_comparison()
-            # print(">", op, self.peek())
             if op[1] == "=":
                 new = Node(BOP, op[1])
                 new.children = [node, right]
             else:
                 new = Node(UOP, op[1])
-                # print(right)
                 if right is not None and right.kind == VAR:
-                    # print("A:")
                     new.children = [right]
                 else:
-                    # print("B:", op, node)
                     new.children = [node]
             node = new
         return node
@@ -282,12 +286,14 @@ class Parser:
     
     def parse_newline(self):
         node = self.parse_affectation()
-        if self.peek()[0] in [NL, RETURN]:
+        if node is None and self.peek()[0] in [NL, RETURN]:
             op = self.consume()  # NL or RETURN
             if op[0] == NL:
-                return self.parse_affectation()
+                new = self.parse_affectation()
+                return new
             else:
-                return self.parse_return()
+                new = self.parse_return()
+                return new
         return node
     
     def parse_block(self, name=""):
