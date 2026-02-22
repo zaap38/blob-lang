@@ -876,33 +876,28 @@ class CodeGen:
                     graph[vid2].append(vid)
             
         # coloring
-        reg_list = ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]
+        reg_list = ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9", \
+                    "r10", "r11", "r12", "r13", "r14", "r15"]
         self.colors = self.color_graph(graph, reg_list)
         # print(self.colors)
                     
     def color_graph(self, interference, registers):
-        """
-        interference: dict var_id -> set(var_id) (graph edges)
-        registers: list of available register names e.g. ["rax","rbx","rcx"]
-        
-        Returns: allocation: dict var_id -> register or None (if spilled)
-        """
+        # returns: allocation: dict var_id -> register or None (if spilled)
         allocation = {}  # var_id -> register or None (spilled)
         
-        # Order variables by degree (optional: largest first can reduce spills)
+        # Order variables by degree (largest first can reduce spills)
         var_order = sorted(interference.keys(), key=lambda v: -len(interference[v]))
         
         for vid in var_order:
             # find registers used by neighbors
-            neighbor_regs = {allocation[n] for n in interference[vid] if n in allocation and allocation[n] is not None}
-            
+            neighbor_regs = {allocation[n] for n in interference[vid] if 
+                             n in allocation and allocation[n] is not None}
             # pick first free register
             assigned = None
             for reg in registers:
                 if reg not in neighbor_regs:
                     assigned = reg
                     break
-            
             allocation[vid] = assigned  # None if all registers are taken (needs spill)
         
         return allocation
@@ -914,12 +909,9 @@ class CodeGen:
             last_use[node.var_id] = time
         elif node.kind == VAR:
             last_use[node.var_id] = time
-
         for c in node.children:
             time = self.compute_lifetime(c, time, first_use, last_use)
-
         return time
-
 
     def gen(self, ast):
         node = ast.root
