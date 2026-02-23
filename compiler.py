@@ -21,6 +21,7 @@ RETURN = "RET"
 RTYP = "R-TYPE"
 ARR = "ARRAY"  # array
 SBS = "SUB-SCRIPT"
+NUL = "NULL"
 
 # AST tokens
 XP = "EXPR"  # expression
@@ -68,6 +69,8 @@ def tokenizer(lines):
 
                 if word in ["void", "int", "float", "string", "bool"]:
                     op_code = TYP
+                elif word in ["null"]:
+                    op_code = NUL
                 elif word == "array":
                     op_code = ARR
                 elif word in ["if", "else"]:
@@ -201,10 +204,12 @@ class Parser:
     
     def parse_literal(self):
         token = self.peek()
-        if token[0] == LIT:
+        if token[0] in [LIT, NUL]:
             self.consume()
             if token[1][0] in string.digits:
                 return Node(NUM, token[1], token[2])
+            elif token[0] == NUL:
+                return Node(token[0], token[1], token[2])
             else:
                 return Node(STRING, token[1], token[2])
         return None
@@ -213,7 +218,7 @@ class Parser:
         token = self.peek()
 
         # number
-        if token[0] == LIT:
+        if token[0] in [LIT, NUL]:
             return self.parse_literal()
 
         # identifier: variable OR function call
@@ -679,11 +684,12 @@ class SemanticAnalyzer:
             child_types = [self.get_type(c) for c in node.children]
             if len(child_types) >= 2:
                 base_type = child_types[0]
-                for t in child_types[1:]:
-                    if t != base_type:
-                        raise Exception(
-                            self.msg_error(node, f"TypeError: Invalid '{node.value}' with types '{child_types}'")
-                        )
+                if base_type != "null":
+                    for t in child_types[1:]:
+                        if t != base_type and t != "null":
+                            raise Exception(
+                                self.msg_error(node, f"TypeError: Invalid '{node.value}' with types '{child_types}'")
+                            )
 
         if node.kind == VDEC:
             child_type = self.get_type(node.children[-1])
@@ -767,6 +773,9 @@ class SemanticAnalyzer:
     def get_type(self, node):
         if node.kind == NUM:
             return "float" if '.' in node.value else "int"
+        
+        elif node.kind == NUL:
+            return "null"
         
         elif node.kind == STRING:
             return "string"
@@ -939,7 +948,7 @@ class CodeGen:
 
     def add_label(self):
         self.label_id += 1
-        self.out.append("Label-" + str(self.label_id) + ":")
+        self.out.append("label_" + str(self.label_id) + ":")
 
 
 if __name__ == "__main__":

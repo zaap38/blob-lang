@@ -21,6 +21,7 @@ void main(string argv, int argc) { ; this is the program entry point
     int a = 5
     int b
     int c = 2
+    b = null
     b = do_stuff(a * 3, 0)
     a++
     --b
