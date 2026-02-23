@@ -945,7 +945,6 @@ class CodeGen:
         self.out = []
         self.identify_scope(node)
         self.coloring(node)
-        print(self.colors)
         self.gen_node(node)
         return "\n".join(self.out)
     
