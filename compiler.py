@@ -815,6 +815,7 @@ class CodeGen:
         self.var_id = 0
         self.label_id = 0
         self.scopes = []
+        self.var_type = {}
 
         self.colors = {}  # [var_id] -> register
         self.first_use = {}
@@ -851,12 +852,14 @@ class CodeGen:
                         name = p.value
                         vid = self.declare_var(name)
                         p.var_id = vid   # tag parameter node
+                        self.var_type[vid] = p.get(TYP)
 
         # variable declaration (int a = 5)
         if node.kind == VDEC:
             name = node.value
             vid = self.declare_var(name)
             node.var_id = vid
+            self.var_type[vid] = node.get(TYP)
 
         # variable usage (a = a + 1)
         if node.kind == VAR:
@@ -871,7 +874,7 @@ class CodeGen:
         if node.kind in (BLOCK, FDEC):
             self.pop_scope()
 
-    def coloring(self, node):
+    def coloring(self, node: Node):
         # get variable lifetime
         self.compute_lifetime(node, 0, self.first_use, self.last_use)
 
@@ -900,10 +903,11 @@ class CodeGen:
         # coloring
         reg_list = ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9", \
                     "r10", "r11", "r12", "r13", "r14", "r15"]
-        self.colors = self.color_graph(graph, reg_list)
+        float_regs = ["xmm0","xmm1","xmm2","xmm3","xmm4","xmm5","xmm6","xmm7"]
+        self.colors = self.color_graph(graph, reg_list, float_regs)
         # print(self.colors)
                     
-    def color_graph(self, interference, registers):
+    def color_graph(self, interference, registers, float_registers):
         # returns: allocation: dict var_id -> register or None (if spilled)
         allocation = {}  # var_id -> register or None (spilled)
         
@@ -916,7 +920,8 @@ class CodeGen:
                              n in allocation and allocation[n] is not None}
             # pick first free register
             assigned = None
-            for reg in registers:
+            regs = registers if self.var_type[vid][0].value != "float" else float_registers
+            for reg in regs:
                 if reg not in neighbor_regs:
                     assigned = reg
                     break
@@ -924,7 +929,7 @@ class CodeGen:
         
         return allocation
 
-    def compute_lifetime(self, node, time=0, first_use={}, last_use={}):
+    def compute_lifetime(self, node: Node, time=0, first_use={}, last_use={}):
         time += 1
         if node.kind == VDEC:
             first_use[node.var_id] = time
@@ -935,11 +940,12 @@ class CodeGen:
             time = self.compute_lifetime(c, time, first_use, last_use)
         return time
 
-    def gen(self, ast):
+    def gen(self, ast: Tree):
         node = ast.root
         self.out = []
         self.identify_scope(node)
         self.coloring(node)
+        print(self.colors)
         self.gen_node(node)
         return "\n".join(self.out)
     

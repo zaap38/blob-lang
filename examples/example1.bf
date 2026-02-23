@@ -23,6 +23,7 @@ void main(string argv, int argc) { ; this is the program entry point
     int c = 2
     b = null
     b = do_stuff(a * 3, 0)
+    float f = .5
     a++
     --b
     if a > b {
