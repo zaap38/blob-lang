@@ -265,7 +265,7 @@ class Parser:
 
     def parse_term(self):
         node = self.parse_factor()
-        while self.peek()[1] in ("*", "/"):
+        while self.peek()[1] in ("*", "/", "//"):
             op = self.consume()
             right = self.parse_factor()
             new = Node(BOP, op[1], op[2])
@@ -673,8 +673,8 @@ class SemanticAnalyzer:
         self.verify(node)
 
     def verify(self, node):
-        # Type-check binary operations
 
+        # Type-check binary operations
         if node.kind == BOP:
             child_types = [self.get_type(c) for c in node.children]
             if len(child_types) >= 2:
@@ -692,6 +692,15 @@ class SemanticAnalyzer:
                 raise Exception(
                     self.msg_error(node,
                         f"TypeError: Invalid initialization for '{base_type}' with type '{child_type}'")
+                )
+
+        if node.kind == "GET":
+            child = node.children[-1]
+            child_type = self.get_type(child)
+            if child_type != "int":
+                raise Exception(
+                    self.msg_error(node,
+                        f"Getter expects 'int', got '{child_type}'")
                 )
 
         # Function call argument type check
@@ -772,7 +781,12 @@ class SemanticAnalyzer:
             return self.get_type(node.children[0])
         
         elif node.kind == BOP:
-            return self.get_type(node.children[0])
+            if node.value == "//":
+                return "int"
+            elif node.value == "/":
+                return "float"
+            else:
+                return self.get_type(node.children[0])
         
         elif node.kind == CALL:
             if node.value in self.functions:
@@ -849,7 +863,6 @@ class CodeGen:
             self.pop_scope()
 
     def coloring(self, node):
-
         # get variable lifetime
         self.compute_lifetime(node, 0, self.first_use, self.last_use)
 

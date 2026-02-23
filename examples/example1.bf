@@ -30,6 +30,6 @@ void main(string argv, int argc) { ; this is the program entry point
         }
     } else {
         array<array<float>> my_tab; nested array
-        my_tab[1][a * 2]
+        my_tab[1][a // 2]
     }
 }
