@@ -1,0 +1,18 @@
+List of features to add:
+
+"^" operator for exponents
+pointers
+var const by default + mutation keyword
+"object" type like lua tables
+"class" keyword
+"struct"
+imports
+ASM inclusion
+"for each"
+"while"
+"elif"
+"auto" type
+basic type conversion for operators
+std library + data structure lib
+make arrays dynamic
+"hashmaps"
