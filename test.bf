@@ -1,3 +1,5 @@
-int, float foo() {
-    return 1, .8
+
+void main() {
+    int a = 2
+    int b = a + 1
 }

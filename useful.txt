@@ -1,8 +1,11 @@
 # path to nasm.exe
-h
+C:\Users\Benoît\AppData\Local\bin\NASM\nasm.exe
+
+# set nasm alias
+Set-Alias -Name nasm -Value "C:\Users\Benoît\AppData\Local\bin\NASM\nasm.exe"
 
 # check nasm installed
-nasm.exe --version
+nasm --version
 
 # use nasm to create a .bin from .asm
 nasm -f bin FILE.asm -o FILE.bin

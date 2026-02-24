@@ -189,6 +189,7 @@ class Parser:
             expr = self.parse_statement()
             if expr is not None:
                 tree.root.add(expr)
+        # tree.root.add(Node(CALL, "main"))
 
         return tree
     
@@ -534,6 +535,7 @@ class Node:
         self.value = value
         self.line_no = line_no
         self.var_id = 0
+        self.offset = 0  # memory offset
         self.children = []
 
     def __str__(self):
@@ -813,13 +815,20 @@ class CodeGen:
 
     def __init__(self):
         self.var_id = 0
+        self.var_offset = 0
         self.label_id = 0
         self.scopes = []
+        self.fun_local_count = {}  # [function name] -> count of local vars
+        self.local_of = {}  # [var_id] -> function name
         self.var_type = {}
+
+        self.vid_to_offset = {}
 
         self.colors = {}  # [var_id] -> register
         self.first_use = {}
         self.last_use = {}
+
+        self.current_regs = {}  # [reg] -> var_id
 
     def push_scope(self):
         self.scopes.append({})
@@ -839,14 +848,16 @@ class CodeGen:
                 return scope[name]
         raise Exception(f"Undeclared variable '{name}'")
 
-    def identify_scope(self, node):
+    def identify_scope(self, node: Node):
         # enter new scope for blocks and functions
         if node.kind in (BLOCK, FDEC):
             self.push_scope()
 
             # if function: declare parameters
             if node.kind == FDEC:
-                params = node.get("PARAMS")
+                self.var_offset = 0
+                self.fun_local_count[node.value] = 0
+                params: list[Node] = node.get("PARAMS")
                 if params:
                     for p in params[0].children:
                         name = p.value
@@ -858,8 +869,13 @@ class CodeGen:
         if node.kind == VDEC:
             name = node.value
             vid = self.declare_var(name)
+            self.var_offset += 8
             node.var_id = vid
+            node.offset = self.var_offset
+            self.vid_to_offset[vid] = node.offset
             self.var_type[vid] = node.get(TYP)
+            self.local_of[vid] = list(self.fun_local_count.keys())[-1]  # parent function
+            self.fun_local_count[self.local_of[vid]] += 1
 
         # variable usage (a = a + 1)
         if node.kind == VAR:
@@ -901,9 +917,11 @@ class CodeGen:
                     graph[vid2].append(vid)
             
         # coloring
-        reg_list = ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9", \
-                    "r10", "r11", "r12", "r13", "r14", "r15"]
+        reg_list = ["rbx", "rcx", "rdx", "rsi", "rdi", "r8", "r9", \
+                    "r10", "r11", "r12", "r13", "r14", "r15"]  # excluded rax to use for const
         float_regs = ["xmm0","xmm1","xmm2","xmm3","xmm4","xmm5","xmm6","xmm7"]
+        for r in reg_list + float_regs:  # init current regs to no value
+            self.current_regs[r] = None
         self.colors = self.color_graph(graph, reg_list, float_regs)
         # print(self.colors)
                     
@@ -946,14 +964,201 @@ class CodeGen:
         self.identify_scope(node)
         self.coloring(node)
         self.gen_node(node)
-        return "\n".join(self.out)
+        return self.out
     
-    def gen_node(self, node):
+    def gen_node(self, node: Node):
+
+        # print(node)
+
+        if node.kind == ITE:
+            pass
+
+        elif node.kind == FDEC:
+            self.label(node.value)
+
+            # rbp: stack base pointer
+            # rsp: stack pointer
+            self.push("rbp", "load space for local var")
+            self.move("rbp", "rsp")
+            self.sub("rsp", 8 * self.fun_local_count[node.value])
+
+            for c in node.children:
+                self.gen_node(c)
+
+        elif node.kind == VDEC:
+            if len(node.children) > 1:
+                rax_val = self.gen_node(node.children[1])
+                self.move(self.get_target(node, True), rax_val, "init with value")
+            else:
+                self.move(self.get_target(node), "0", "zero-ing")
+
+        elif node.kind == BOP:
+            return self.gen_bop(node)
+
+        elif node.kind == CALL:
+            pass
+
+
+        elif node.kind == ITE:
+            pass
+
+        elif node.kind == FOR:
+            pass
+
+        elif node.kind == RETURN:
+            pass
+
+        elif node.kind == VAR:
+            return self.colors[node.var_id]
+        
+        elif node.kind == NUM:
+            return node.value
+
+        elif node.kind == BLOCK:
+            for c in node.children:
+                self.gen_node(c)
+
+        elif node.kind == "ROOT":
+            self.write("bits 64")
+            self.write("default rel")
+            self.write("global _start")
+            self.write("")
+            self.write("_start:")
+            self.jump("main")
+            for c in node.children:
+                self.gen_node(c)
+
+    def rbp(self, node):
+        if type(node) == int:
+            return "[rbp-" + str(node) + "]"
+        return "[rbp-" + str(node.offset) + "]"
+
+    def get_target(self, node: Node, is_init: bool = False):
+        reg = self.colors[node.var_id]
+        if node.var_id not in self.colors:
+            return self.rbp(node)
+        if self.current_regs[reg] != node.var_id and not is_init:
+            old_vid = self.current_regs[reg]
+            self.move(self.rbp(self.vid_to_offset[old_vid]), reg)
+            self.current_regs[reg] = node.var_id
+            self.move(reg, self.rbp(node), "loading " + str(node.value))
+        return reg
+
+    def gen_statement(self, node: Node):
         pass
 
-    def add_label(self):
-        self.label_id += 1
-        self.out.append("label_" + str(self.label_id) + ":")
+    def gen_expr(self, node: Node):
+        pass
+
+    def gen_affectation(self, node: Node):
+        pass
+
+    def gen_bop(self, node: Node):
+        left = node.children[0]
+        right = node.children[1]
+        r1 = self.gen_node(left)
+        r2 = self.gen_node(right)
+
+        if node.value == "=":
+            rax_val = self.gen_node(right)
+            target = self.get_target(left)
+            self.move(target, rax_val)
+            return target
+
+        elif node.value == "+":
+            return self.add(r1, r2)
+
+        elif node.value == "-":
+            return self.sub(r1, r2)
+        
+        elif node.value == "/":
+            pass
+        
+        elif node.value == "//":
+            pass
+        
+        elif node.value == "*":
+            pass
+        
+        elif node.value == "^":
+            pass
+
+    def call(self, node: Node):
+        pass
+
+    def ite(self, node: Node):
+        pass
+
+    def forloop(self, node: Node):
+        pass
+
+    def ret(self, node: Node):
+        pass
+
+    def label(self, name=""):
+        if name == "":
+            self.label_id += 1
+            name = "label_" + str(self.label_id)
+        self.write(name + ":")
+        return name
+
+    def move(self, r1, r2, comment=""):
+        if comment != "":
+            comment = "        ;; " + comment
+        self.write("mov " + str(r1) + ", " + str(r2) + comment)
+        return r1
+
+    def add(self, r1, r2, comment=""):
+        if comment != "":
+            comment = "        ;; " + comment
+        self.write("add " + str(r1) + ", " + str(r2) + comment)
+        return r1
+
+    def sub(self, r1, r2, comment=""):
+        if comment != "":
+            comment = "        ;; " + comment
+        self.write("sub " + str(r1) + ", " + str(r2) + comment)
+        return r1
+
+    def push(self, v, comment=""):
+        if comment != "":
+            comment = "        ;; " + comment
+        self.write("push " + str(v) + comment)
+
+    def pop(self, v, comment=""):
+        if comment != "":
+            comment = "        ;; " + comment
+        self.write("pop " + str(v) + comment)
+
+    def pusha(self, comment=""):
+        if comment != "":
+            comment = "        ;; " + comment
+        self.write("pusha" + comment)
+
+    def popa(self, comment=""):
+        if comment != "":
+            comment = "        ;; " + comment
+        self.write("popa" + comment)
+
+    def jump(self, label, t=None):
+        # "jump if false" setup
+        commands = {
+            "<": "jge",
+            ">": "jle",
+            "<=": "jg",
+            ">=": "jl",
+            "==": "jne",
+            "!=": "je",
+            None: "jmp"
+        }
+        self.write(commands[t] + " " + str(label))
+
+    def add_cmp(self, r1, r2):
+        self.write("cmp " + str(r1) + ", " + str(r2))
+        return r1
+
+    def write(self, line):
+        self.out.append(line)
 
 
 if __name__ == "__main__":
@@ -984,5 +1189,9 @@ if __name__ == "__main__":
     SemanticAnalyzer().analyze(ast)
 
     print("==========ASM-GEN==========")
-    CodeGen().gen(ast)
+    asm_code = CodeGen().gen(ast)
+    print(asm_code)
+    with open("./output.asm", "w") as of:
+        of.write("\n".join(asm_code))
+    print("ASM Generated")
     # ast.print()  # ast with var IDs
