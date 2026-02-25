@@ -1,6 +1,8 @@
 import sys
 import string
 
+INT_MAX = 2**32-1
+INT_MIN = -2**32
 
 # base tokens
 ID = "ID"  # identifier
@@ -79,11 +81,14 @@ def tokenizer(lines):
                     op_code = FOR
                 elif word == "return":
                     op_code = RETURN
+                elif word in ["and", "or"]:
+                    op_code = BOP
                 else:
                     op_code = ID
 
             elif c in "+-*/^=<>!":
                 op_code = OP
+
                 while c in "+-*/^=<>!":
                     word += c
                     index += 1
@@ -299,12 +304,22 @@ class Parser:
             node = new
         return node
     
-    def parse_affectation(self):
+    def parse_boolean_op(self):
         node = self.parse_comparison()
+        while self.peek()[1] in ("and", "or"):
+            op = self.consume()
+            right = self.parse_comparison()
+            new = Node(BOP, op[1], op[2])
+            new.children = [node, right]
+            node = new
+        return node
+    
+    def parse_affectation(self):
+        node = self.parse_boolean_op()
         while self.peek()[1] in ("=", "+=", "-=", "++", "--"):
             op = self.consume()
             new = None
-            right = self.parse_comparison()
+            right = self.parse_boolean_op()
             if op[1] == "=":
                 new = Node(BOP, op[1], op[2])
                 new.children = [node, right]
@@ -319,11 +334,11 @@ class Parser:
     
     def parse_return(self):
         node = Node(RETURN, "", self.peek()[2])
-        ret_node = self.parse_comparison()
+        ret_node = self.parse_boolean_op()
         while ret_node is not None:
             node.add(ret_node)
             self.consume()  # ','
-            ret_node = self.parse_comparison()
+            ret_node = self.parse_boolean_op()
         node.value = len(node.children)
         return node
     
@@ -366,7 +381,7 @@ class Parser:
         if_then_else.add(Node("COND", "if", op[2]))
         ifblock = if_then_else.children[-1]
 
-        cond = self.parse_comparison()
+        cond = self.parse_boolean_op()
         ifblock.add(cond)
 
         thenblock = self.parse_block("then")
@@ -477,7 +492,7 @@ class Parser:
 
         if self.peek()[1] == "=":
             self.consume()
-            node.add(self.parse_comparison())
+            node.add(self.parse_boolean_op())
 
         return node
 
@@ -686,17 +701,26 @@ class SemanticAnalyzer:
             child_types = [self.get_type(c) for c in node.children]
             if len(child_types) >= 2:
                 base_type = child_types[0]
-                if base_type != "null":
-                    for t in child_types[1:]:
-                        if t != base_type and t != "null":
-                            raise Exception(
-                                self.msg_error(node, f"TypeError: Invalid '{node.value}' with types '{child_types}'")
-                            )
+                ltype = child_types[0]
+                rtype = child_types[1]
+                force_ok = False
+                if ltype == "float" and rtype == "int":
+                    force_ok = True
+                if node.value == "=" and rtype == "null":
+                    force_ok = True
+                if not force_ok and ltype != rtype:
+                    raise Exception(
+                        self.msg_error(node, f"TypeError: Invalid '{node.value}' with types '{child_types}'")
+                    )
 
         if node.kind == VDEC:
             child_type = self.get_type(node.children[-1])
             base_type = node.children[0].value
-            if child_type != base_type and child_type is not None:
+            force_ok = False
+            if base_type == "float" and child_type == "int":
+                force_ok = True
+            if child_type != base_type and child_type is not None and \
+                    child_type != "null" and not force_ok:
                 raise Exception(
                     self.msg_error(node,
                         f"TypeError: Invalid initialization for '{base_type}' with type '{child_type}'")
