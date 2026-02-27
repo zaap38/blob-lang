@@ -1078,6 +1078,7 @@ class CodeGen:
                 self.gen_node(c)
 
             # return 0
+            self.label("exit")
             self.move(rax, 60)
             self.xor(rdi, rdi)
             self.syscall()
@@ -1126,12 +1127,18 @@ class CodeGen:
         return reg
 
     def gen_lib_print(self, node: Node):
-        self.move(r8, self.color(node.children[0]))
+        self.move(r9, 8)
+        self.move(r8, self.at(self.color(node.children[0])))  # load len in r8
+        self.div(r8, r9)  # len // 8
+        self.inc(r8)
+        self.move(r10, 8)
+        self.mult(r8, r10)
+        self.move(r9, self.color(node.children[0]))
         self.move(rax, 1, "syscall: write")
         self.move(rdi, 1, "std out")
-        self.move(rdx, self.at(r8), "length of the string") 
-        self.sub(r8, 8)
-        self.move(rsi, r8, "address of the string")
+        self.move(rdx, self.at(r9), "length of the string")
+        self.sub(r9, r8)
+        self.move(rsi, r9, "address of the string")
         self.syscall()
 
     def gen_statement(self, node: Node):
@@ -1213,6 +1220,39 @@ class CodeGen:
         self.write("add " + str(r1) + ", " + str(r2) + comment)
         return r1
     
+    def mult(self, r1, r2, comment=""):
+        if comment != "":
+            comment = "        ;; " + comment
+        self.push(rax)
+        self.push(rdx)
+        self.move(rax, r1)
+        self.xor(rdx, rdx)
+        self.write("mul " + str(r2) + comment)
+        self.move(r1, rax)
+        self.pop(rax)
+        self.pop(rdx)
+        return r1
+    
+    def div(self, r1, r2, comment=""):
+        if comment != "":
+            comment = "        ;; " + comment
+        self.push(rax)
+        self.push(rbx)
+        self.push(rdx)
+        self.move(rax, r1)
+        self.move(rbx, r2)
+        self.move("bh", 0)
+        self.cmp(rbx, 0, "check division by zero")
+        self.jump("exit", "!=")
+        self.xor(rdx, rdx)
+        self.write("div " + rbx + comment)
+        self.move("ah", 0)
+        self.move(r1, rax)
+        self.pop(rax)
+        self.pop(rbx)
+        self.pop(rdx)
+        return r1
+    
     def xor(self, r1, r2, comment=""):
         if comment != "":
             comment = "        ;; " + comment
@@ -1258,8 +1298,10 @@ class CodeGen:
         }
         self.write(commands[t] + " " + str(label))
 
-    def add_cmp(self, r1, r2):
-        self.write("cmp " + str(r1) + ", " + str(r2))
+    def cmp(self, r1, r2, comment=""):
+        if comment != "":
+            comment = "        ;; " + comment
+        self.write("cmp " + str(r1) + ", " + str(r2) + comment)
         return r1
 
     def write(self, line):
