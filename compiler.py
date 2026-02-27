@@ -1,5 +1,7 @@
 import sys
 import string
+from registers import *
+
 
 INT_MAX = 2**32-1
 INT_MIN = -2**32
@@ -43,6 +45,11 @@ YELLOW = "\033[93m"
 GREEN = "\033[92m"
 RED = "\033[91m"
 ENDCOLOR = "\033[0m"
+
+
+STDLIB = [
+    "print",
+]
 
 
 def tokenizer(lines):
@@ -549,7 +556,8 @@ class Node:
         self.kind = kind
         self.value = value
         self.line_no = line_no
-        self.var_id = 0
+        self.vid = 0
+        self.color = ""
         self.offset = 0  # memory offset
         self.children = []
 
@@ -589,8 +597,8 @@ class Node:
         code = (self.kind, self.value)
         if code is not None:
             text_value = str(code[1])
-            if self.kind in [VAR, VDEC] and self.var_id != 0:
-                text_value = text_value + "{" + RED + str(self.var_id) + YELLOW + "}"
+            if self.kind in [VAR, VDEC] and self.vid != 0:
+                text_value = text_value + "{" + RED + str(self.vid) + YELLOW + "}"
             name = BLUE + str(code[0]) + ENDCOLOR + '<' + YELLOW + text_value + ENDCOLOR + '>'
             if len(self.children) > 0:
                 name += ':'
@@ -737,6 +745,8 @@ class SemanticAnalyzer:
 
         # Function call argument type check
         if node.kind == CALL:
+            if node.value in STDLIB:
+                return
             if node.value not in self.functions:
                 raise Exception(self.msg_error(node, f"Call to undefined function '{node.value}'"))
             sig = self.functions[node.value]
@@ -838,21 +848,22 @@ class SemanticAnalyzer:
 class CodeGen:
 
     def __init__(self):
-        self.var_id = 0
+        self.vid = 0
         self.var_offset = 0
         self.label_id = 0
         self.scopes = []
         self.fun_local_count = {}  # [function name] -> count of local vars
-        self.local_of = {}  # [var_id] -> function name
+        self.local_of = {}  # [vid] -> function name
         self.var_type = {}
 
         self.vid_to_offset = {}
+        self.vid_to_node = {}
 
-        self.colors = {}  # [var_id] -> register
+        self.colors = {}  # [vid] -> register
         self.first_use = {}
         self.last_use = {}
 
-        self.current_regs = {}  # [reg] -> var_id
+        self.current_regs = {}  # [reg] -> vid
 
     def push_scope(self):
         self.scopes.append({})
@@ -861,8 +872,8 @@ class CodeGen:
         self.scopes.pop()
 
     def declare_var(self, name):
-        vid = "v" + str(self.var_id)
-        self.var_id += 1
+        vid = "v" + str(self.vid)
+        self.vid += 1
         self.scopes[-1][name] = vid
         return vid
 
@@ -886,7 +897,8 @@ class CodeGen:
                     for p in params[0].children:
                         name = p.value
                         vid = self.declare_var(name)
-                        p.var_id = vid   # tag parameter node
+                        p.vid = vid   # tag parameter node
+                        self.vid_to_node[vid] = p
                         self.var_type[vid] = p.get(TYP)
 
         # variable declaration (int a = 5)
@@ -894,9 +906,10 @@ class CodeGen:
             name = node.value
             vid = self.declare_var(name)
             self.var_offset += 8
-            node.var_id = vid
+            node.vid = vid
             node.offset = self.var_offset
             self.vid_to_offset[vid] = node.offset
+            self.vid_to_node[vid] = node
             self.var_type[vid] = node.get(TYP)
             self.local_of[vid] = list(self.fun_local_count.keys())[-1]  # parent function
             self.fun_local_count[self.local_of[vid]] += 1
@@ -904,7 +917,7 @@ class CodeGen:
         # variable usage (a = a + 1)
         if node.kind == VAR:
             vid = self.lookup_var(node.value)
-            node.var_id = vid
+            node.vid = vid
 
         # recurse
         for c in node.children:
@@ -947,11 +960,14 @@ class CodeGen:
         for r in reg_list + float_regs:  # init current regs to no value
             self.current_regs[r] = None
         self.colors = self.color_graph(graph, reg_list, float_regs)
+        for vid, color in self.colors.items():
+            self.vid_to_node[vid].color = color
+
         # print(self.colors)
                     
     def color_graph(self, interference, registers, float_registers):
-        # returns: allocation: dict var_id -> register or None (if spilled)
-        allocation = {}  # var_id -> register or None (spilled)
+        # returns: allocation: dict vid -> register or None (if spilled)
+        allocation = {}  # vid -> register or None (spilled)
         
         # Order variables by degree (largest first can reduce spills)
         var_order = sorted(interference.keys(), key=lambda v: -len(interference[v]))
@@ -974,13 +990,16 @@ class CodeGen:
     def compute_lifetime(self, node: Node, time=0, first_use={}, last_use={}):
         time += 1
         if node.kind == VDEC:
-            first_use[node.var_id] = time
-            last_use[node.var_id] = time
+            first_use[node.vid] = time
+            last_use[node.vid] = time
         elif node.kind == VAR:
-            last_use[node.var_id] = time
+            last_use[node.vid] = time
         for c in node.children:
             time = self.compute_lifetime(c, time, first_use, last_use)
         return time
+
+    def color(self, node: Node):
+        return self.colors[node.vid]
 
     def gen(self, ast: Tree):
         node = ast.root
@@ -1002,9 +1021,9 @@ class CodeGen:
 
             # rbp: stack base pointer
             # rsp: stack pointer
-            self.push("rbp", "load space for local var")
-            self.move("rbp", "rsp")
-            self.sub("rsp", 8 * self.fun_local_count[node.value])
+            self.push(rbp, "load space for local var")
+            self.move(rbp, rsp)
+            self.sub(rsp, 8 * self.fun_local_count[node.value])
 
             for c in node.children:
                 self.gen_node(c)
@@ -1020,8 +1039,11 @@ class CodeGen:
             return self.gen_bop(node)
 
         elif node.kind == CALL:
-            pass
-
+            
+            if node.value == "print":
+                self.gen_lib_print(node)
+            else:
+                pass
 
         elif node.kind == ITE:
             pass
@@ -1033,10 +1055,13 @@ class CodeGen:
             pass
 
         elif node.kind == VAR:
-            return self.colors[node.var_id]
+            return self.colors[node.vid]
         
         elif node.kind == NUM:
             return node.value
+
+        elif node.kind == STRING:
+            return self.init_string(node)
 
         elif node.kind == BLOCK:
             for c in node.children:
@@ -1052,21 +1077,54 @@ class CodeGen:
             for c in node.children:
                 self.gen_node(c)
 
+    def init_string(self, node):
+        # save a string in memory and return a pointer to it
+        text = node.value
+        self.sub(rbp, 8, "loading string '" + text + "' on stack")
+        self.move(rsp, rbp)
+        padding = 8 - (len(text)) % 8
+        self.sub(rsp, 8 + len(text) + padding)
+        self.move("[" + rbp + "]", len(text), "string size")
+        for i in range(len(text)):
+            self.move(self.rbp(padding + i + 1), "'" + text[-(i + 1)] + "'")
+        self.move(rax, rbp)
+        return rax
+
     def rbp(self, node):
+        head = "[" + rbp + "-"
         if type(node) == int:
-            return "[rbp-" + str(node) + "]"
-        return "[rbp-" + str(node.offset) + "]"
+            return head + str(node) + "]"
+        return head + str(node.offset) + "]"
+    
+    def at(self, reg, node=None):
+        head = "[" + reg
+        if node is not None:
+            head += "-"
+            if type(node) == int:
+                return head + str(node) + "]"
+            return head + str(node.offset) + "]"
+        return head + "]"
+
 
     def get_target(self, node: Node, is_init: bool = False):
-        reg = self.colors[node.var_id]
-        if node.var_id not in self.colors:
+        reg = self.colors[node.vid]
+        if node.vid not in self.colors:
             return self.rbp(node)
-        if self.current_regs[reg] != node.var_id and not is_init:
+        if self.current_regs[reg] != node.vid and not is_init:
             old_vid = self.current_regs[reg]
             self.move(self.rbp(self.vid_to_offset[old_vid]), reg)
-            self.current_regs[reg] = node.var_id
+            self.current_regs[reg] = node.vid
             self.move(reg, self.rbp(node), "loading " + str(node.value))
         return reg
+
+    def gen_lib_print(self, node: Node):
+        self.move(r8, self.color(node.children[0]))
+        self.move(rax, 1, "syscall: write")
+        self.move(rdi, 1, "std out")
+        self.move(rdx, self.at(r8), "length of the string") 
+        self.sub(r8, 8)
+        self.move(rsi, r8, "address of the string")
+        self.syscall()
 
     def gen_statement(self, node: Node):
         pass
@@ -1107,6 +1165,12 @@ class CodeGen:
         elif node.value == "^":
             pass
 
+    def syscall(self):
+        self.write("syscall")
+
+    def inst(self, inst_addr):
+        self.write("int " + str(inst_addr))
+
     def call(self, node: Node):
         pass
 
@@ -1118,6 +1182,9 @@ class CodeGen:
 
     def ret(self, node: Node):
         pass
+
+    def inc(self, reg):
+        self.write("inc " + reg)
 
     def label(self, name=""):
         if name == "":
