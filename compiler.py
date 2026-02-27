@@ -1200,7 +1200,8 @@ class CodeGen:
     def ret(self, node: Node):
         pass
 
-    def inc(self, reg):
+    def inc(self, reg, comment=""):
+        comment = self.make_comment(comment)
         self.write("inc " + reg)
 
     def label(self, name=""):
@@ -1211,20 +1212,17 @@ class CodeGen:
         return name
 
     def move(self, r1, r2, comment=""):
-        if comment != "":
-            comment = "        ;; " + comment
+        comment = self.make_comment(comment)
         self.write("mov " + str(r1) + ", " + str(r2) + comment)
         return r1
 
     def add(self, r1, r2, comment=""):
-        if comment != "":
-            comment = "        ;; " + comment
+        comment = self.make_comment(comment)
         self.write("add " + str(r1) + ", " + str(r2) + comment)
         return r1
     
     def mult(self, r1, r2, comment=""):
-        if comment != "":
-            comment = "        ;; " + comment
+        comment = self.make_comment(comment)
         self.push(rax)
         self.push(rdx)
         self.move(rax, r1)
@@ -1236,8 +1234,7 @@ class CodeGen:
         return r1
     
     def div(self, r1, r2, comment=""):
-        if comment != "":
-            comment = "        ;; " + comment
+        comment = self.make_comment(comment)
         self.push(rax)
         self.push(rbx)
         self.push(rdx)
@@ -1256,35 +1253,29 @@ class CodeGen:
         return r1
     
     def xor(self, r1, r2, comment=""):
-        if comment != "":
-            comment = "        ;; " + comment
+        comment = self.make_comment(comment)
         self.write("xor " + str(r1) + ", " + str(r2) + comment)
         return r1
 
     def sub(self, r1, r2, comment=""):
-        if comment != "":
-            comment = "        ;; " + comment
+        comment = self.make_comment(comment)
         self.write("sub " + str(r1) + ", " + str(r2) + comment)
         return r1
 
     def push(self, v, comment=""):
-        if comment != "":
-            comment = "        ;; " + comment
+        comment = self.make_comment(comment)
         self.write("push " + str(v) + comment)
 
     def pop(self, v, comment=""):
-        if comment != "":
-            comment = "        ;; " + comment
+        comment = self.make_comment(comment)
         self.write("pop " + str(v) + comment)
 
     def pusha(self, comment=""):
-        if comment != "":
-            comment = "        ;; " + comment
+        comment = self.make_comment(comment)
         self.write("pusha" + comment)
 
     def popa(self, comment=""):
-        if comment != "":
-            comment = "        ;; " + comment
+        comment = self.make_comment(comment)
         self.write("popa" + comment)
 
     def jump(self, label, t=None):
@@ -1305,6 +1296,11 @@ class CodeGen:
             comment = "        ;; " + comment
         self.write("cmp " + str(r1) + ", " + str(r2) + comment)
         return r1
+    
+    def make_comment(self, comment):
+        if comment != "":
+            return "        ;; " + comment
+        return ""
 
     def write(self, line, indent="\t"):
         self.out.append(indent + line)
