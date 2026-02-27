@@ -9,3 +9,9 @@ nasm --version
 
 # use nasm to create a .bin from .asm
 nasm -f bin FILE.asm -o FILE.bin
+
+# In WSL
+alias nasm='/mnt/c/Users/Benoît/AppData/Local/bin/NASM/nasm.exe'
+nasm -f elf64 output.asm -o output.o    # assemble
+ld output.o -o output.exe               # link
+./output.exe                            # now it runs
