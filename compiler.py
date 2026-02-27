@@ -1024,12 +1024,15 @@ class CodeGen:
             # rbp: stack base pointer
             # rsp: stack pointer
             self.comment("declaring function " + node.value)
-            self.push(rbp, "load space for local var")
+            # self.push(rbp, "load space for local var")
             self.move(rbp, rsp)
             # self.sub(rsp, 8 * self.fun_local_count[node.value], "reserve space for local variables")
 
             for c in node.children:
                 self.gen_node(c)
+
+            self.move(rsp, rbp, "free stack memory")
+            self.ret(node)
 
         elif node.kind == VDEC:
             if len(node.children) > 1:
@@ -1076,9 +1079,12 @@ class CodeGen:
             self.write("global _start", "")
             self.write("")
             self.label("_start")
-            self.jump("main")
+            self.write("call main")
+            self.jump("exit")
+            # self.jump("main")
             for c in node.children:
                 self.gen_node(c)
+
 
             # return 0
             self.label("exit")
@@ -1095,11 +1101,12 @@ class CodeGen:
         # self.sub(rbp, 8, "loading string '" + text + "' on stack")
         self.move(rsp, rbp)
         padding = 8 - (len(text)) % 8
-        self.sub(rsp, len(text) + padding)
-        self.move("[" + rbp + "]", len(text), "string size")
+        self.sub(rsp, 8 + len(text) + padding)
+        self.move("[" + rbp + "-8]", len(text), "string size")
         for i in range(len(text)):
-            self.move(self.rbp(padding + i + 1), "'" + text[-(i + 1)] + "'")
+            self.move(self.rbp(padding + i + 1 + 8), "'" + text[-(i + 1)] + "'")
         self.move(rax, rbp)
+        self.sub(rax, 8)
         return rax
 
     def rbp(self, node):
@@ -1190,7 +1197,7 @@ class CodeGen:
         self.write("int " + str(inst_addr))
 
     def call(self, node: Node):
-        pass
+        self.write("call " + node.value)
 
     def ite(self, node: Node):
         pass
@@ -1199,7 +1206,7 @@ class CodeGen:
         pass
 
     def ret(self, node: Node):
-        pass
+        self.write("ret")
 
     def inc(self, reg, comment=""):
         comment = self.make_comment(comment)

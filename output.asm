@@ -3,24 +3,25 @@ default rel
 global _start
 	
 _start:
-	jmp main
+	call main
+	jmp exit
 main:
 	;;declaring function main
-	push rbp        ;; load space for local var
 	mov rbp, rsp
 	mov rsp, rbp
-	sub rsp, 16
-	mov [rbp], 9        ;; string size
-	mov [rbp-8], '9'
-	mov [rbp-9], '8'
-	mov [rbp-10], '7'
-	mov [rbp-11], '6'
-	mov [rbp-12], '5'
-	mov [rbp-13], '4'
-	mov [rbp-14], '3'
-	mov [rbp-15], '2'
-	mov [rbp-16], '1'
+	sub rsp, 24
+	mov [rbp-8], 9        ;; string size
+	mov [rbp-16], '9'
+	mov [rbp-17], '8'
+	mov [rbp-18], '7'
+	mov [rbp-19], '6'
+	mov [rbp-20], '5'
+	mov [rbp-21], '4'
+	mov [rbp-22], '3'
+	mov [rbp-23], '2'
+	mov [rbp-24], '1'
 	mov rax, rbp
+	sub rax, 8
 	mov rbx, rax        ;; init with value
 	mov r9, 8
 	mov r8, [rbx]
@@ -56,6 +57,8 @@ main:
 	sub r9, r8
 	mov rsi, r9        ;; address of the string
 	syscall
+	mov rsp, rbp        ;; free stack memory
+	ret
 exit:
 	mov rax, 60
 	xor rdi, rdi
