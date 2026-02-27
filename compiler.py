@@ -1023,9 +1023,10 @@ class CodeGen:
 
             # rbp: stack base pointer
             # rsp: stack pointer
+            self.comment("declaring function " + node.value)
             self.push(rbp, "load space for local var")
             self.move(rbp, rsp)
-            self.sub(rsp, 8 * self.fun_local_count[node.value])
+            # self.sub(rsp, 8 * self.fun_local_count[node.value], "reserve space for local variables")
 
             for c in node.children:
                 self.gen_node(c)
@@ -1091,10 +1092,10 @@ class CodeGen:
     def init_string(self, node):
         # save a string in memory and return a pointer to it
         text = node.value
-        self.sub(rbp, 8, "loading string '" + text + "' on stack")
+        # self.sub(rbp, 8, "loading string '" + text + "' on stack")
         self.move(rsp, rbp)
         padding = 8 - (len(text)) % 8
-        self.sub(rsp, 8 + len(text) + padding)
+        self.sub(rsp, len(text) + padding)
         self.move("[" + rbp + "]", len(text), "string size")
         for i in range(len(text)):
             self.move(self.rbp(padding + i + 1), "'" + text[-(i + 1)] + "'")
@@ -1301,6 +1302,9 @@ class CodeGen:
         if comment != "":
             return "        ;; " + comment
         return ""
+    
+    def comment(self, text):
+        self.write(";;" + text)
 
     def write(self, line, indent="\t"):
         self.out.append(indent + line)

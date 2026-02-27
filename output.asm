@@ -5,12 +5,11 @@ global _start
 _start:
 	jmp main
 main:
+	;;declaring function main
 	push rbp        ;; load space for local var
 	mov rbp, rsp
-	sub rsp, 8
-	sub rbp, 8        ;; loading string '123456789' on stack
 	mov rsp, rbp
-	sub rsp, 24
+	sub rsp, 16
 	mov [rbp], 9        ;; string size
 	mov [rbp-8], '9'
 	mov [rbp-9], '8'
