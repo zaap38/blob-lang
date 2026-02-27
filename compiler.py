@@ -157,7 +157,7 @@ def tokenizer(lines):
                         break
                     c = line[index]
             elif c == "\"":
-                op_code = LIT
+                op_code = STRING
                 escaped = False
                 index += 1
                 c = line[index]
@@ -217,9 +217,11 @@ class Parser:
     
     def parse_literal(self):
         token = self.peek()
-        if token[0] in [LIT, NUL]:
+        if token[0] in [LIT, NUL, STRING]:
             self.consume()
-            if token[1][0] in string.digits:
+            if token[0] == STRING:
+                return Node(STRING, token[1], token[2])
+            elif token[1][0] in string.digits:
                 return Node(NUM, token[1], token[2])
             elif token[0] == NUL:
                 return Node(token[0], token[1], token[2])
@@ -231,7 +233,7 @@ class Parser:
         token = self.peek()
 
         # number
-        if token[0] in [LIT, NUL]:
+        if token[0] in [LIT, NUL, STRING]:
             return self.parse_literal()
 
         # identifier: variable OR function call
@@ -1068,11 +1070,11 @@ class CodeGen:
                 self.gen_node(c)
 
         elif node.kind == "ROOT":
-            self.write("bits 64")
-            self.write("default rel")
-            self.write("global _start")
+            self.write("bits 64", "")
+            self.write("default rel", "")
+            self.write("global _start", "")
             self.write("")
-            self.write("_start:")
+            self.label("_start")
             self.jump("main")
             for c in node.children:
                 self.gen_node(c)
@@ -1205,7 +1207,7 @@ class CodeGen:
         if name == "":
             self.label_id += 1
             name = "label_" + str(self.label_id)
-        self.write(name + ":")
+        self.write(name + ":", "")
         return name
 
     def move(self, r1, r2, comment=""):
@@ -1304,8 +1306,8 @@ class CodeGen:
         self.write("cmp " + str(r1) + ", " + str(r2) + comment)
         return r1
 
-    def write(self, line):
-        self.out.append(line)
+    def write(self, line, indent="\t"):
+        self.out.append(indent + line)
 
 
 if __name__ == "__main__":
