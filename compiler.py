@@ -1339,7 +1339,7 @@ if __name__ == "__main__":
 
     print("==========ASM-GEN==========")
     asm_code = CodeGen().gen(ast)
-    print(asm_code)
+    # print(asm_code)
     with open("./output.asm", "w") as of:
         of.write("\n".join(asm_code))
     print("ASM Generated")
