@@ -1077,6 +1077,14 @@ class CodeGen:
             for c in node.children:
                 self.gen_node(c)
 
+            # return 0
+            self.move(rax, 60)
+            self.xor(rdi, rdi)
+            self.syscall()
+            # mov rax, 60   ; syscall number for exit
+            # xor rdi, rdi  ; exit code 0
+            # syscall
+
     def init_string(self, node):
         # save a string in memory and return a pointer to it
         text = node.value
@@ -1203,6 +1211,12 @@ class CodeGen:
         if comment != "":
             comment = "        ;; " + comment
         self.write("add " + str(r1) + ", " + str(r2) + comment)
+        return r1
+    
+    def xor(self, r1, r2, comment=""):
+        if comment != "":
+            comment = "        ;; " + comment
+        self.write("xor " + str(r1) + ", " + str(r2) + comment)
         return r1
 
     def sub(self, r1, r2, comment=""):

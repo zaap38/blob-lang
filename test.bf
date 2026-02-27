@@ -1,5 +1,5 @@
 
 void main() {
-    string a = "foo"
+    string a = "fooSuperLong string"
     print(a)
 }

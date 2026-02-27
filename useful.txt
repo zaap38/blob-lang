@@ -15,3 +15,6 @@ alias nasm='/mnt/c/Users/Benoît/AppData/Local/bin/NASM/nasm.exe'
 nasm -f elf64 output.asm -o output.o    # assemble
 ld output.o -o output.exe               # link
 ./output.exe                            # now it runs
+
+# makefile
+make clean; make SRC=FILE.bf
