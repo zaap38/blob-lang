@@ -1341,6 +1341,24 @@ class CodeGen:
         comment = self.make_comment(comment)
         self.write("sub " + str(r1) + ", " + str(r2) + comment)
         return r1
+    
+    def push_callee_saved(self, v):
+        comment = self.make_comment(comment)
+        if type(v) != list:
+            v = [v]
+        for reg in v:
+            if reg in [rbx, r12, r13, r14, r15]:
+                self.write("push " + str(reg) + comment)
+                comment = ""
+
+    def pop_callee_saved(self, v):
+        comment = self.make_comment(comment)
+        if type(v) != list:
+            v = [v]
+        for reg in v:
+            if reg in [rbx, r12, r13, r14, r15]:
+                self.write("pop " + str(reg) + comment)
+                comment = ""
 
     def push(self, v, comment=""):
         comment = self.make_comment(comment)
@@ -1348,6 +1366,7 @@ class CodeGen:
             v = [v]
         for reg in v:
             self.write("push " + str(reg) + comment)
+            comment = ""
 
     def pop(self, v, comment=""):
         comment = self.make_comment(comment)
@@ -1355,6 +1374,7 @@ class CodeGen:
             v = [v]
         for reg in reversed(v):
             self.write("pop " + str(reg) + comment)
+            comment = ""
 
     def pusha(self, comment=""):
         comment = self.make_comment(comment)
