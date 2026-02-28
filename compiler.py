@@ -1093,28 +1093,50 @@ class CodeGen:
 
     def int_to_string(self, r1):
         # return in rax an address to the generated string
-        self.move(rax, r1)
-        self.move(rdx, rax)  # save orignal value
+        used_regs = [rbx, rcx, rdx, r8, r9, r10]
+
+        self.comment("int_to_string")
+        self.push(used_regs)
+
+        self.move(rdx, r1)  # save orignal value
+        self.move(r8, rdx)
 
         # get length first
         self.move(rcx, 100000000)  # count 8 bytes blocks
-        self.div64(rax, rcx)
-        self.move(rbx, rax)
+        self.div64(r8, rcx)
+        self.add(r8, 1)  # +1 line for the reminder
         self.move(rcx, 8)
-        self.mult(rbx, rcx)  # lines for the generated string
-        self.add(rbx, 8)  # line for the length
-        self.sub(rsp, rbx)  # reserve space
-        self.move(rbx, 0)
+        self.mult(r8, rcx)  # lines for the generated string
+        self.add(r8, 8)  # +1 line for the length
+        self.move(rax, r8)
+
+        self.pop(used_regs)
+
+        self.sub(rsp, rax, "reserve space")
+        self.move(r10, rsp)  # mem old rsp pointer
+
+        self.push(used_regs)
+
+        self.move(r8, rax)
+        self.move(r9, 0)
+        self.move(rbx, rax)
 
         lid = self.label()  # while rax > 10
         self.move(rcx, 10)  # used for calculations
-        self.div64(rax, rcx)
-        self.move("[" + rsp + "+" + rbx + "]", "cl")
-        self.cmp(rax, 10)
-        self.inc(rbx)
-        self.jump(lid, "<")  # jump if geq to 10
-        
+        self.div64(rbx, rcx)
+        self.add(rcx, "48", "convert to char digit")
+        self.move("[" + r10 + "+" + r9 + "]", rcx)
+        self.inc(r9)
+        self.cmp(rbx, 0)
+        self.jump(lid, "==")  # jump if not zero
 
+        # write string length
+        self.move(rax, r10)
+        self.add(rax, r8)
+        self.sub(rax, 8)
+        self.move(self.at(rax), r9)
+        
+        self.pop(used_regs)
 
     def init_string(self, node):
         # save a string in memory and return a pointer to it
@@ -1123,6 +1145,7 @@ class CodeGen:
         if node.kind == NUM:
             self.move(rax, node.value)
             self.int_to_string(rax)
+            return rax
         elif node.kind == VAR:
             # TODO
             return self.color(node)
@@ -1158,7 +1181,7 @@ class CodeGen:
         reg = self.colors[node.vid]
         if node.vid not in self.colors:  # if var is spilled
             return self.rbp(node)
-        if self.current_regs[reg] != node.vid and not is_init:  # load var into reg
+        if (True or self.current_regs[reg] != node.vid) and not is_init:  # load var into reg
             old_vid = self.current_regs[reg]
             if old_vid is not None:
                 self.move(self.rbp(self.vid_to_offset[old_vid]), reg)

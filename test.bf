@@ -1,4 +1,4 @@
 
 void main() {
-    print("test")
+    print(66)
 }
