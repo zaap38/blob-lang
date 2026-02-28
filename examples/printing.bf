@@ -4,4 +4,6 @@ void main() {
     print("abcdefghij"); print literal
     string a = "my_string_to_print"
     print(a); print from string var
+    int b = 123
+    print(b)
 }

@@ -498,7 +498,6 @@ class Parser:
     def parse_var_dec(self, type_node, name_tok):
         node = Node(VDEC, name_tok[1], name_tok[2])
         node.add(type_node)
-
         if self.peek()[1] == "=":
             self.consume()
             node.add(self.parse_boolean_op())
@@ -1095,11 +1094,9 @@ class CodeGen:
         # return in rax an address to the generated string
 
         self.move(rax, r1)
-        used_regs = [rbx]
 
         self.comment("int_to_string()")
 
-        self.push(used_regs)
         self.push(rax)  # save rax to
 
         self.move(rdx, r1)  # save orignal value
@@ -1114,24 +1111,20 @@ class CodeGen:
         self.add(r8, 8)  # +1 line for the length
 
         self.pop(rax)  # get the content of r1 back
-
-        self.pop(used_regs)
         
         self.sub(rsp, r8, "reserve space")
         self.move(r10, rsp)  # mem old rsp pointer
 
-        self.push(used_regs)
-
         self.move(r9, 0)
-        self.move(rbx, rax)
+        self.move(r11, rax)
 
         lid = self.label()  # while rax > 10
         self.move(rcx, 10)  # used for calculations
-        self.div64(rbx, rcx)
+        self.div64(r11, rcx)
         self.add(rcx, "48", "convert to char digit")
         self.move("[" + r10 + "+" + r9 + "]", rcx)
         self.inc(r9)
-        self.cmp(rbx, 0)
+        self.cmp(r11, 0)
         self.jump(lid, "==")  # jump if not zero
 
         # write string length
@@ -1140,10 +1133,7 @@ class CodeGen:
         self.sub(rax, 8)
         self.move(self.at(rax), r9)
 
-        self.move(rax, rsp, "move result address in rax")
-        self.add(rax, r8)
-        
-        self.pop(used_regs)
+        return rax
 
     def init_string(self, node):
         # save a string in memory and return a pointer to it
@@ -1151,11 +1141,9 @@ class CodeGen:
         text = ""
         if node.kind == NUM:
             self.move(rax, node.value)
-            self.int_to_string(rax)
-            return rax
+            return self.int_to_string(rax)
         elif node.kind == VAR:
-            # TODO
-            return self.color(node)
+            return self.int_to_string(self.color(node))
         else:
             text = node.value
         # self.move(rsp, rbp)
@@ -1201,10 +1189,8 @@ class CodeGen:
         reg = ""
         if child.kind == VAR:
             if self.var_type[child.vid] != "string":
-                # reg = self.color(child)
-                pass
+                reg = self.init_string(child)
             else:
-                # TODO
                 reg = self.color(child)
         else:
             reg = self.init_string(child)
