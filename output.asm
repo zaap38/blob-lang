@@ -6,40 +6,38 @@ _start:
 	call main
 	jmp exit
 main:
-	;;declaring function main
+	;; declaring function main
 	mov rbp, rsp
-	mov rsp, rbp
+	;; init string: STR(test_string)
 	sub rsp, 24
-	mov [rbp-8], 9        ;; string size
-	mov [rbp-16], '9'
-	mov [rbp-17], '8'
-	mov [rbp-18], '7'
-	mov [rbp-19], '6'
-	mov [rbp-20], '5'
-	mov [rbp-21], '4'
-	mov [rbp-22], '3'
-	mov [rbp-23], '2'
-	mov [rbp-24], '1'
+	mov [rbp-8], 11        ;; string size
+	mov [rbp-14], 'g'
+	mov [rbp-15], 'n'
+	mov [rbp-16], 'i'
+	mov [rbp-17], 'r'
+	mov [rbp-18], 't'
+	mov [rbp-19], 's'
+	mov [rbp-20], '_'
+	mov [rbp-21], 't'
+	mov [rbp-22], 's'
+	mov [rbp-23], 'e'
+	mov [rbp-24], 't'
 	mov rax, rbp
 	sub rax, 8
 	mov rbx, rax        ;; init with value
 	mov r9, 8
 	mov r8, [rbx]
 	push rax
-	push rbx
 	push rdx
 	mov rax, r8
-	mov rbx, r9
-	mov bh, 0
-	cmp rbx, 0        ;; check division by zero
-	je exit
 	xor rdx, rdx
-	div rbx
-	mov ah, 0
+	cmp r9, 0        ;; check division by zero
+	je exit
+	div r9
 	mov r8, rax
-	pop rax
-	pop rbx
+	mov r9, rdx
 	pop rdx
+	pop rax
 	inc r8
 	mov r10, 8
 	push rax

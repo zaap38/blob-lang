@@ -856,7 +856,7 @@ class CodeGen:
         self.scopes = []
         self.fun_local_count = {}  # [function name] -> count of local vars
         self.local_of = {}  # [vid] -> function name
-        self.var_type = {}
+        self.var_type = {}  # [vid] -> var type
 
         self.vid_to_offset = {}
         self.vid_to_node = {}
@@ -912,7 +912,7 @@ class CodeGen:
             node.offset = self.var_offset
             self.vid_to_offset[vid] = node.offset
             self.vid_to_node[vid] = node
-            self.var_type[vid] = node.get(TYP)
+            self.var_type[vid] = node.get(TYP)[0].value
             self.local_of[vid] = list(self.fun_local_count.keys())[-1]  # parent function
             self.fun_local_count[self.local_of[vid]] += 1
 
@@ -980,7 +980,7 @@ class CodeGen:
                              n in allocation and allocation[n] is not None}
             # pick first free register
             assigned = None
-            regs = registers if self.var_type[vid][0].value != "float" else float_registers
+            regs = registers if self.var_type[vid] != "float" else float_registers
             for reg in regs:
                 if reg not in neighbor_regs:
                     assigned = reg
@@ -1081,25 +1081,55 @@ class CodeGen:
             self.label("_start")
             self.write("call main")
             self.jump("exit")
-            # self.jump("main")
+            
             for c in node.children:
                 self.gen_node(c)
-
 
             # return 0
             self.label("exit")
             self.move(rax, 60)
             self.xor(rdi, rdi)
             self.syscall()
-            # mov rax, 60   ; syscall number for exit
-            # xor rdi, rdi  ; exit code 0
-            # syscall
+
+    def int_to_string(self, node):
+        # return in rax an address to the generated string
+        self.push(self.color(node))
+
+        self.move(rax, self.color(node))
+        self.move(rdx, rax)  # save orignal value
+
+        # get length first
+        self.move(rcx, 100000000)  # count 8 bytes blocks
+        self.div(rax, rcx)
+        self.move(rbx, rax)
+        self.move(rcx, 8)
+        self.mult(rbx, rcx)  # lines for the generated string
+        self.add(rbx, 8)  # line for the length
+        self.sub(rsp, rbx)  # reserve space
+        self.move(rbx, 0)
+
+        lid = self.label()  # while rax > 10
+        self.move(rcx, 10)  # used for calculations
+        self.div(rax, rcx)
+        self.move("[" + rsp + "+" + rbx + "]", "cl")
+        self.cmp(rax, 10)
+        self.inc(rbx)
+        self.jump(lid, "<")  # jump if geq to 10
+        
+
 
     def init_string(self, node):
         # save a string in memory and return a pointer to it
-        text = node.value
-        # self.sub(rbp, 8, "loading string '" + text + "' on stack")
-        self.move(rsp, rbp)
+        self.comment("init string: " + node.kind + "(" + node.value + ")")
+        text = ""
+        if node.kind == NUM:
+            self.int_to_string(node)
+        elif node.kind == VAR:
+            # TODO
+            return self.color(node)
+        else:
+            text = node.value
+        # self.move(rsp, rbp)
         padding = 8 - (len(text)) % 8
         self.sub(rsp, 8 + len(text) + padding)
         self.move("[" + rbp + "-8]", len(text), "string size")
@@ -1127,23 +1157,31 @@ class CodeGen:
 
     def get_target(self, node: Node, is_init: bool = False):
         reg = self.colors[node.vid]
-        if node.vid not in self.colors:
+        if node.vid not in self.colors:  # if var is spilled
             return self.rbp(node)
-        if self.current_regs[reg] != node.vid and not is_init:
+        if self.current_regs[reg] != node.vid and not is_init:  # load var into reg
             old_vid = self.current_regs[reg]
-            self.move(self.rbp(self.vid_to_offset[old_vid]), reg)
+            if old_vid is not None:
+                self.move(self.rbp(self.vid_to_offset[old_vid]), reg)
             self.current_regs[reg] = node.vid
             self.move(reg, self.rbp(node), "loading " + str(node.value))
         return reg
 
     def gen_lib_print(self, node: Node):
         self.move(r9, 8)
-        self.move(r8, self.at(self.color(node.children[0])))  # load len in r8
-        self.div(r8, r9)  # len // 8
+        child = node.children[0]
+        reg = self.color(child)
+        if child.kind == VAR and self.var_type[child.vid] != "string":
+            # if 'int' variable, write it in stack as a string
+            reg = self.init_string(child)
+            
+        self.move(r8, self.at(reg))  # load len in r8
+        # self.div(r8, r9)  # len // 8
+        self.div64(r8, r9)
         self.inc(r8)
         self.move(r10, 8)
         self.mult(r8, r10)
-        self.move(r9, self.color(node.children[0]))
+        self.move(r9, reg)
         self.move(rax, 1, "syscall: write")
         self.move(rdi, 1, "std out")
         self.move(rdx, self.at(r9), "length of the string")
@@ -1161,15 +1199,17 @@ class CodeGen:
         pass
 
     def gen_bop(self, node: Node):
+        self.comment("binop '" + node.value + "'")
         left = node.children[0]
         right = node.children[1]
+        
         r1 = self.gen_node(left)
         r2 = self.gen_node(right)
-
+        
         if node.value == "=":
             rax_val = self.gen_node(right)
             target = self.get_target(left)
-            self.move(target, rax_val)
+            self.move(target, rax_val, "affectation")
             return target
 
         elif node.value == "+":
@@ -1242,6 +1282,8 @@ class CodeGen:
         return r1
     
     def div(self, r1, r2, comment=""):
+        # r1 - quotient
+        # r2 - reminder
         comment = self.make_comment(comment)
         self.push(rax)
         self.push(rbx)
@@ -1253,12 +1295,32 @@ class CodeGen:
         self.jump("exit", "!=")
         self.xor(rdx, rdx)
         self.write("div " + rbx + comment)
+        self.move(rdx, rax)
+        self.move("dl", 0)
+        self.move(r2, rdx)
         self.move("ah", 0)
         self.move(r1, rax)
-        self.pop(rax)
-        self.pop(rbx)
         self.pop(rdx)
+        self.pop(rbx)
+        self.pop(rax)
         return r1
+    
+    def div64(self, r1, r2, comment=""):
+        comment = self.make_comment(comment)
+        self.push(rax)
+        self.push(rdx)
+
+        self.move(rax, r1)
+        self.xor(rdx, rdx)
+        self.cmp(r2, 0, "check division by zero")
+        self.jump("exit", "!=")
+        self.write("div " + r2 + comment)
+        self.move(r1, rax)
+        self.move(r2, rdx)
+
+        self.pop(rdx)
+        self.pop(rax)
+        return r1, r2
     
     def xor(self, r1, r2, comment=""):
         comment = self.make_comment(comment)
@@ -1311,7 +1373,7 @@ class CodeGen:
         return ""
     
     def comment(self, text):
-        self.write(";;" + text)
+        self.write(";; " + text)
 
     def write(self, line, indent="\t"):
         self.out.append(indent + line)

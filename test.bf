@@ -1,5 +1,5 @@
 
 void main() {
-    string a = "123456789"
+    string a = "test_string"
     print(a)
 }
