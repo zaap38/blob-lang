@@ -1091,11 +1091,9 @@ class CodeGen:
             self.xor(rdi, rdi)
             self.syscall()
 
-    def int_to_string(self, node):
+    def int_to_string(self, r1):
         # return in rax an address to the generated string
-        self.push(self.color(node))
-
-        self.move(rax, self.color(node))
+        self.move(rax, r1)
         self.move(rdx, rax)  # save orignal value
 
         # get length first
@@ -1123,7 +1121,8 @@ class CodeGen:
         self.comment("init string: " + node.kind + "(" + node.value + ")")
         text = ""
         if node.kind == NUM:
-            self.int_to_string(node)
+            self.move(rax, node.value)
+            self.int_to_string(rax)
         elif node.kind == VAR:
             # TODO
             return self.color(node)
@@ -1170,10 +1169,18 @@ class CodeGen:
     def gen_lib_print(self, node: Node):
         self.move(r9, 8)
         child = node.children[0]
-        reg = self.color(child)
-        if child.kind == VAR and self.var_type[child.vid] != "string":
-            # if 'int' variable, write it in stack as a string
-            reg = self.init_string(child)
+        reg = ""
+        if child.kind == VAR:
+            if self.var_type[child.vid] != "string":
+                reg = self.color(child)
+            else:
+                # TODO
+                pass
+        else:
+            if child.kind == STRING:
+                reg = self.init_string(child)
+            else:
+                reg = self.init_string(child)
             
         self.move(r8, self.at(reg))  # load len in r8
         # self.div(r8, r9)  # len // 8
@@ -1273,12 +1280,14 @@ class CodeGen:
         comment = self.make_comment(comment)
         self.push(rax)
         self.push(rdx)
+        
         self.move(rax, r1)
         self.xor(rdx, rdx)
         self.write("mul " + str(r2) + comment)
         self.move(r1, rax)
-        self.pop(rax)
+
         self.pop(rdx)
+        self.pop(rax)
         return r1
     
     def div(self, r1, r2, comment=""):
