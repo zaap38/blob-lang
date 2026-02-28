@@ -8,16 +8,12 @@ _start:
 main:
 	;; declaring function main
 	mov rbp, rsp
-	mov r9, 8
 	;; init string: NUM(66)
 	mov rax, 66
-	;; int_to_string
+	mov rax, rax
+	;; int_to_string()
 	push rbx
-	push rcx
-	push rdx
-	push r8
-	push r9
-	push r10
+	push rax
 	mov rdx, rax
 	mov r8, rdx
 	mov rcx, 100000000
@@ -43,22 +39,11 @@ main:
 	pop rdx
 	pop rax
 	add r8, 8
-	mov rax, r8
-	pop r10
-	pop r9
-	pop r8
-	pop rdx
-	pop rcx
+	pop rax
 	pop rbx
-	sub rsp, rax        ;; reserve space
+	sub rsp, r8        ;; reserve space
 	mov r10, rsp
 	push rbx
-	push rcx
-	push rdx
-	push r8
-	push r9
-	push r10
-	mov r8, rax
 	mov r9, 0
 	mov rbx, rax
 label_1:
@@ -83,20 +68,18 @@ label_1:
 	add rax, r8
 	sub rax, 8
 	mov [rax], r9
-	pop r10
-	pop r9
-	pop r8
-	pop rdx
-	pop rcx
+	mov rax, rsp        ;; move result address in rax
+	add rax, r8
 	pop rbx
-	mov r8, [rax]
+	mov r8, [rax]        ;; load len in r8
+	mov r9, 8
 	push rax
 	push rdx
 	mov rax, r8
 	xor rdx, rdx
 	cmp r9, 0        ;; check division by zero
 	je exit
-	div r9
+	div r9        ;; len // 8
 	mov r8, rax
 	mov r9, rdx
 	pop rdx
@@ -112,6 +95,105 @@ label_1:
 	pop rdx
 	pop rax
 	mov r9, rax
+	mov rax, 1        ;; syscall: write
+	mov rdi, 1        ;; std out
+	mov rdx, [r9]        ;; length of the string
+	sub r9, r8
+	mov rsi, r9        ;; address of the string
+	syscall
+	;; init string: STR(abcdefghij)
+	sub rsp, 24
+	mov [rbp-8], 10        ;; string size
+	mov [rbp-15], 'j'
+	mov [rbp-16], 'i'
+	mov [rbp-17], 'h'
+	mov [rbp-18], 'g'
+	mov [rbp-19], 'f'
+	mov [rbp-20], 'e'
+	mov [rbp-21], 'd'
+	mov [rbp-22], 'c'
+	mov [rbp-23], 'b'
+	mov [rbp-24], 'a'
+	mov rax, rbp
+	sub rax, 8
+	mov r8, [rax]        ;; load len in r8
+	mov r9, 8
+	push rax
+	push rdx
+	mov rax, r8
+	xor rdx, rdx
+	cmp r9, 0        ;; check division by zero
+	je exit
+	div r9        ;; len // 8
+	mov r8, rax
+	mov r9, rdx
+	pop rdx
+	pop rax
+	inc r8
+	mov r10, 8
+	push rax
+	push rdx
+	mov rax, r8
+	xor rdx, rdx
+	mul r10
+	mov r8, rax
+	pop rdx
+	pop rax
+	mov r9, rax
+	mov rax, 1        ;; syscall: write
+	mov rdi, 1        ;; std out
+	mov rdx, [r9]        ;; length of the string
+	sub r9, r8
+	mov rsi, r9        ;; address of the string
+	syscall
+	;; init string: STR(my_string_to_print)
+	sub rsp, 32
+	mov [rbp-8], 18        ;; string size
+	mov [rbp-15], 't'
+	mov [rbp-16], 'n'
+	mov [rbp-17], 'i'
+	mov [rbp-18], 'r'
+	mov [rbp-19], 'p'
+	mov [rbp-20], '_'
+	mov [rbp-21], 'o'
+	mov [rbp-22], 't'
+	mov [rbp-23], '_'
+	mov [rbp-24], 'g'
+	mov [rbp-25], 'n'
+	mov [rbp-26], 'i'
+	mov [rbp-27], 'r'
+	mov [rbp-28], 't'
+	mov [rbp-29], 's'
+	mov [rbp-30], '_'
+	mov [rbp-31], 'y'
+	mov [rbp-32], 'm'
+	mov rax, rbp
+	sub rax, 8
+	mov rbx, rax        ;; init with value
+	mov r8, [rbx]        ;; load len in r8
+	mov r9, 8
+	push rax
+	push rdx
+	mov rax, r8
+	xor rdx, rdx
+	cmp r9, 0        ;; check division by zero
+	je exit
+	div r9        ;; len // 8
+	mov r8, rax
+	mov r9, rdx
+	pop rdx
+	pop rax
+	inc r8
+	mov r10, 8
+	push rax
+	push rdx
+	mov rax, r8
+	xor rdx, rdx
+	mul r10
+	mov r8, rax
+	pop rdx
+	pop rax
+	mov r9, rbx
 	mov rax, 1        ;; syscall: write
 	mov rdi, 1        ;; std out
 	mov rdx, [r9]        ;; length of the string

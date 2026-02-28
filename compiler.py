@@ -1093,31 +1093,35 @@ class CodeGen:
 
     def int_to_string(self, r1):
         # return in rax an address to the generated string
-        used_regs = [rbx, rcx, rdx, r8, r9, r10]
 
-        self.comment("int_to_string")
+        self.move(rax, r1)
+        used_regs = [rbx]
+
+        self.comment("int_to_string()")
+
         self.push(used_regs)
+        self.push(rax)  # save rax to
 
         self.move(rdx, r1)  # save orignal value
         self.move(r8, rdx)
 
         # get length first
-        self.move(rcx, 100000000)  # count 8 bytes blocks
+        self.move(rcx, 10 ** 8)  # count 8 bytes blocks
         self.div64(r8, rcx)
         self.add(r8, 1)  # +1 line for the reminder
         self.move(rcx, 8)
         self.mult(r8, rcx)  # lines for the generated string
         self.add(r8, 8)  # +1 line for the length
-        self.move(rax, r8)
+
+        self.pop(rax)  # get the content of r1 back
 
         self.pop(used_regs)
-
-        self.sub(rsp, rax, "reserve space")
+        
+        self.sub(rsp, r8, "reserve space")
         self.move(r10, rsp)  # mem old rsp pointer
 
         self.push(used_regs)
 
-        self.move(r8, rax)
         self.move(r9, 0)
         self.move(rbx, rax)
 
@@ -1135,6 +1139,9 @@ class CodeGen:
         self.add(rax, r8)
         self.sub(rax, 8)
         self.move(self.at(rax), r9)
+
+        self.move(rax, rsp, "move result address in rax")
+        self.add(rax, r8)
         
         self.pop(used_regs)
 
@@ -1190,24 +1197,21 @@ class CodeGen:
         return reg
 
     def gen_lib_print(self, node: Node):
-        self.move(r9, 8)
         child = node.children[0]
         reg = ""
         if child.kind == VAR:
             if self.var_type[child.vid] != "string":
-                reg = self.color(child)
+                # reg = self.color(child)
+                pass
             else:
                 # TODO
-                pass
+                reg = self.color(child)
         else:
-            if child.kind == STRING:
-                reg = self.init_string(child)
-            else:
-                reg = self.init_string(child)
-            
-        self.move(r8, self.at(reg))  # load len in r8
-        # self.div(r8, r9)  # len // 8
-        self.div64(r8, r9)
+            reg = self.init_string(child)
+        
+        self.move(r8, self.at(reg), "load len in r8")
+        self.move(r9, 8)
+        self.div64(r8, r9, "len // 8")
         self.inc(r8)
         self.move(r10, 8)
         self.mult(r8, r10)
