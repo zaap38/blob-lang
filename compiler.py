@@ -1098,7 +1098,7 @@ class CodeGen:
 
         # get length first
         self.move(rcx, 100000000)  # count 8 bytes blocks
-        self.div(rax, rcx)
+        self.div64(rax, rcx)
         self.move(rbx, rax)
         self.move(rcx, 8)
         self.mult(rbx, rcx)  # lines for the generated string
@@ -1108,7 +1108,7 @@ class CodeGen:
 
         lid = self.label()  # while rax > 10
         self.move(rcx, 10)  # used for calculations
-        self.div(rax, rcx)
+        self.div64(rax, rcx)
         self.move("[" + rsp + "+" + rbx + "]", "cl")
         self.cmp(rax, 10)
         self.inc(rbx)
@@ -1278,46 +1278,21 @@ class CodeGen:
     
     def mult(self, r1, r2, comment=""):
         comment = self.make_comment(comment)
-        self.push(rax)
-        self.push(rdx)
-        
+
+        self.push([rax, rdx])
+
         self.move(rax, r1)
         self.xor(rdx, rdx)
         self.write("mul " + str(r2) + comment)
         self.move(r1, rax)
+        
+        self.pop([rax, rdx])
 
-        self.pop(rdx)
-        self.pop(rax)
-        return r1
-    
-    def div(self, r1, r2, comment=""):
-        # r1 - quotient
-        # r2 - reminder
-        comment = self.make_comment(comment)
-        self.push(rax)
-        self.push(rbx)
-        self.push(rdx)
-        self.move(rax, r1)
-        self.move(rbx, r2)
-        self.move("bh", 0)
-        self.cmp(rbx, 0, "check division by zero")
-        self.jump("exit", "!=")
-        self.xor(rdx, rdx)
-        self.write("div " + rbx + comment)
-        self.move(rdx, rax)
-        self.move("dl", 0)
-        self.move(r2, rdx)
-        self.move("ah", 0)
-        self.move(r1, rax)
-        self.pop(rdx)
-        self.pop(rbx)
-        self.pop(rax)
         return r1
     
     def div64(self, r1, r2, comment=""):
         comment = self.make_comment(comment)
-        self.push(rax)
-        self.push(rdx)
+        self.push([rax, rdx])
 
         self.move(rax, r1)
         self.xor(rdx, rdx)
@@ -1326,9 +1301,8 @@ class CodeGen:
         self.write("div " + r2 + comment)
         self.move(r1, rax)
         self.move(r2, rdx)
-
-        self.pop(rdx)
-        self.pop(rax)
+        
+        self.pop([rax, rdx])
         return r1, r2
     
     def xor(self, r1, r2, comment=""):
@@ -1343,11 +1317,17 @@ class CodeGen:
 
     def push(self, v, comment=""):
         comment = self.make_comment(comment)
-        self.write("push " + str(v) + comment)
+        if type(v) != list:
+            v = [v]
+        for reg in v:
+            self.write("push " + str(reg) + comment)
 
     def pop(self, v, comment=""):
         comment = self.make_comment(comment)
-        self.write("pop " + str(v) + comment)
+        if type(v) != list:
+            v = [v]
+        for reg in reversed(v):
+            self.write("pop " + str(reg) + comment)
 
     def pusha(self, comment=""):
         comment = self.make_comment(comment)
