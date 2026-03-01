@@ -1432,7 +1432,6 @@ class CodeGen:
             self.pop_clobbered(regs, f_name)
         return ret_reg
 
-
     def push(self, v, comment=""):
         comment = self.make_comment(comment)
         if type(v) != list:
