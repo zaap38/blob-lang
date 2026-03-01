@@ -315,9 +315,6 @@ class CodeGen:
         # fuse [div64, mult]
         # return in rax an address to the generated string
 
-        # known issue:
-        # 123 is saved as string "321"
-
         self.comment("int_to_string()")
 
         self.push(r1)  # save r1 on stack
@@ -361,8 +358,8 @@ class CodeGen:
         self.push(r11)
         self.move(r11, rdx)
         self.sub(r11, r9)
-        self.move("[" + r10 + "+" + r11 + "]", "cl")
-        # self.move("[" + r10 + "+" + r9 + "]", rcx)
+        # writes using cl to avoid writing the full register
+        self.move("[" + r10 + "+" + r11 + "]", "cl")  
         self.inc(r9)
         self.pop(r11)
         self.cmp(r11, 0)
