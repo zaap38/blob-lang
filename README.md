@@ -11,8 +11,8 @@ If you wish to try it, use the makefile to compile and run your .bf file.
 NOTE: It requires `python3` and `nasm` to work. Edit the makefile and replace the following lines with your actual executable locations:
 
 ```sh
-NASM=/mnt/c/Users/Benoît/AppData/Local/bin/NASM/nasm.exe
-PYTH=/mnt/c/Users/Benoît/AppData/Local/Programs/Python/Python310/python.exe
+NASM=/your/path/to/nasm.exe
+PYTH=/your/path/to/Python310/python.exe
 ```
 
 Then run the following:
