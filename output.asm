@@ -32,8 +32,8 @@ main:
 	xor rdx, rdx
 	mul rcx
 	mov r8, rax
-	pop rax
 	pop rdx
+	pop rax
 	add r8, 8
 	pop rax
 	sub rsp, r8        ;; reserve space
@@ -51,8 +51,8 @@ label_1:
 	div rcx
 	mov r11, rax
 	mov rcx, rdx
-	pop rax
 	pop rdx
+	pop rax
 	add rcx, 48        ;; convert to char digit
 	mov [r10+r9], rcx
 	inc r9
@@ -216,8 +216,8 @@ label_1:
 	xor rdx, rdx
 	mul rcx
 	mov r8, rax
-	pop rax
 	pop rdx
+	pop rax
 	add r8, 8
 	pop rax
 	sub rsp, r8        ;; reserve space
@@ -235,8 +235,8 @@ label_2:
 	div rcx
 	mov r11, rax
 	mov rcx, rdx
-	pop rax
 	pop rdx
+	pop rax
 	add rcx, 48        ;; convert to char digit
 	mov [r10+r9], rcx
 	inc r9

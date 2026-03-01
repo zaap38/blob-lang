@@ -870,6 +870,8 @@ class CodeGen:
         self.clobbers = {}  # [function_name] -> [clobbered regs]
         self.init_clobbers()
 
+        self.push_pop_delta = 0
+
     def init_clobbers(self):
         self.clobbers["int_to_string"] = [rax, rcx, rdx, r8, r9, r10, r11]
         self.clobbers["init_string"] = [rax]
@@ -1046,6 +1048,9 @@ class CodeGen:
         self.identify_scope(node)
         self.coloring(node)
         self.gen_node(node)
+
+        assert self.push_pop_delta == 0  # if not zero, something has been forgotten
+
         return self.out
     
     def gen_node(self, node: Node):
@@ -1240,14 +1245,10 @@ class CodeGen:
         
         self.move(r8, self.at(reg), "load len in r8")
         self.move(r9, 8)
-        self.push([rax, rdx])
-        self.div64(r8, r9, "len // 8")
-        self.pop([rax, rdx])
+        self.pp(self.div64, r8, r9, [rax, rdx], "len // 8")
         self.inc(r8)
         self.move(r10, 8)
-        self.push([rax, rdx])
-        self.mult(r8, r10)
-        self.pop([rax, rdx])
+        self.pp(self.mult, r8, r10, [rax, rdx])
         self.move(r9, reg)
         self.move(rax, 1, "syscall: write")
         self.move(rdi, 1, "std out")
@@ -1405,16 +1406,16 @@ class CodeGen:
             regs = [regs]
         for reg in regs:
             if reg in self.clobbers[f_name]:
-                self.write("push " + str(reg) + comment)
+                self.push(reg)
                 comment = ""
     
     def pop_clobbered(self, regs, f_name, comment=""):
         comment = self.make_comment(comment)
         if type(regs) != list:
             regs = [regs]
-        for reg in regs:
-            if reg in reversed(self.clobbers[f_name]):
-                self.write("pop " + str(reg) + comment)
+        for reg in reversed(regs):
+            if reg in self.clobbers[f_name]:
+                self.pop(reg)
                 comment = ""
 
     def pp(self, f, r1, r2="", regs=None, comment=""):
@@ -1437,6 +1438,7 @@ class CodeGen:
         if type(v) != list:
             v = [v]
         for reg in v:
+            self.push_pop_delta += 1
             self.write("push " + str(reg) + comment)
             comment = ""
 
@@ -1445,6 +1447,7 @@ class CodeGen:
         if type(v) != list:
             v = [v]
         for reg in reversed(v):
+            self.push_pop_delta -= 1
             self.write("pop " + str(reg) + comment)
             comment = ""
 
