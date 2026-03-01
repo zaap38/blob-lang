@@ -38,6 +38,7 @@ class CodeGen:
         self.clobbers["gen_lib_print"] = [rax, rdx, r8, r9, r10, rsi]
         self.clobbers["mult"] = [rax, rdx]
         self.clobbers["div64"] = [rax, rcx, rdx]
+        self.clobbers["log_n"] = [rax]
 
         # filter out regs that do not need to be saved by this function
         for k in self.clobbers:
@@ -48,6 +49,7 @@ class CodeGen:
         fuse["int_to_string"] = ["div64", "mult"]
         fuse["init_string"] = ["int_to_string"]
         fuse["gen_lib_print"] = ["init_string", "div64", "mult"]
+        fuse["log_n"] = ["div64"]
         
         changed = True
         while changed:
@@ -293,6 +295,21 @@ class CodeGen:
             self.xor(rdi, rdi)
             self.syscall()
 
+    def log_n(self, r1, r2, comment=""):
+        # use [rax]
+        # fuse [div64]
+        # return in r1 the value of log_r2(r1)
+        self.comment("log_n(" + r1 + ", " + r2 + ")")
+        self.move(rax, 0)
+        lib = self.label()
+        self.inc(rax)
+        self.push(r2)
+        self.pp(self.div64, r1, r2, [rax])
+        self.pop(r2)
+        self.cmp(r1, 0)
+        self.jump(lib, "==")
+        self.move(r1, rax)
+
     def int_to_string(self, r1):
         # use [rax, rcx, rdx, r8, r9, r10, r11]
         # fuse [div64, mult]
@@ -301,24 +318,35 @@ class CodeGen:
         # known issue:
         # 123 is saved as string "321"
 
-        self.move(rax, r1)
-
         self.comment("int_to_string()")
 
-        self.push(rax)  # save rax to
+        self.push(r1)  # save r1 on stack
 
-        self.move(rdx, r1)  # save orignal value
-        self.move(r8, rdx)
+        self.move(r8, r1)  # save orignal value
 
         # get length first
         self.move(rcx, 10 ** 8)  # count 8 bytes blocks
-        self.pp(self.div64, r8, rcx, [rdx])
-        self.add(r8, 1)  # +1 line for the reminder
+        # self.pp(self.div64, r8, rcx, [r1], "number 32 bit blocks needed")
+        self.pp(self.log_n, r8, rcx, [r1], "number 32 bit blocks needed")
+        self.sub(r8, 1)  # remove the default '1' of log_n
+        self.div64(r1, rcx)
+
+        self.move(r9, 10)
+        # self.pp(self.div64, rcx, r9, [r1, r8], "number 8 bit cells needed")
+        self.pp(self.log_n, rcx, r9, [r8], "number 8 bit cells needed")
+
+        self.move(rdx, rcx)  # rdx has byte length of last line
+        self.add(rdx, r8)  # rdx now has byte length of the whole string
+        self.sub(rdx, 1)  # offset by 1 for array (i.e. memory) writing
+
+        self.add(r8, 1)  # +1 line for the reminder of the string
         self.move(rcx, 8)
-        self.pp(self.mult, r8, rcx, [rax, rcx, rdx, r9, r10])
+        self.pp(self.mult, r8, rcx, [rcx, rdx])
+        
         self.add(r8, 8)  # +1 line for the length
 
-        self.pop(rax)  # get the content of r1 back
+        self.pop(rax)  # get the content of r1 that was on stack into rax
+        self.move(r1, rax)
         
         self.sub(rsp, r8, "reserve space")
         self.move(r10, rsp)  # mem old rsp pointer
@@ -328,10 +356,15 @@ class CodeGen:
 
         lid = self.label()  # while rax > 10
         self.move(rcx, 10)  # used for calculations
-        self.pp(self.div64, r11, rcx, [rax, rdx, r8, r9, r10])
+        self.pp(self.div64, r11, rcx, [r1, rax, rdx, r8, r9, r10])
         self.add(rcx, "48", "convert to char digit")
-        self.move("[" + r10 + "+" + r9 + "]", rcx)
+        self.push(r11)
+        self.move(r11, rdx)
+        self.sub(r11, r9)
+        self.move("[" + r10 + "+" + r11 + "]", "cl")
+        # self.move("[" + r10 + "+" + r9 + "]", rcx)
         self.inc(r9)
+        self.pop(r11)
         self.cmp(r11, 0)
         self.jump(lid, "==")  # jump if not zero
 
@@ -590,13 +623,13 @@ class CodeGen:
         # wraps the function f with pushçclobbered() and pop_cloberred()
         assert f.__name__ in self.clobbers
         f_name = f.__name__
-        if regs is not  None:
+        if regs is not None:
             self.push_clobbered(regs, f_name)
         if r2 == "":
             ret_reg = f(r1, comment)
         else:
             ret_reg = f(r1, r2, comment)
-        if regs is not  None:
+        if regs is not None:
             self.pop_clobbered(regs, f_name)
         return ret_reg
 

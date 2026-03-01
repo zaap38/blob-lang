@@ -12,10 +12,15 @@ main:
 	mov rax, 123
 	;; int_to_string()
 	push rax
-	mov rdx, rax
-	mov r8, rdx
+	mov r8, rax
 	mov rcx, 100000000
-	push rdx
+	push rax
+	;; log_n(r8, rcx)
+	mov rax, 0
+label_1:
+	inc rax
+	push rcx
+	push rax
 	mov rax, r8
 	xor rdx, rdx
 	cmp rcx, 0        ;; check division by zero
@@ -23,25 +28,57 @@ main:
 	div rcx
 	mov r8, rax
 	mov rcx, rdx
-	pop rdx
+	pop rax
+	pop rcx
+	cmp r8, 0
+	jne label_1
+	mov r8, rax
+	pop rax
+	sub r8, 1
+	xor rdx, rdx
+	cmp rcx, 0        ;; check division by zero
+	je exit
+	div rcx
+	mov rcx, rdx
+	mov r9, 10
+	;; log_n(rcx, r9)
+	mov rax, 0
+label_2:
+	inc rax
+	push r9
+	push rax
+	mov rax, rcx
+	xor rdx, rdx
+	cmp r9, 0        ;; check division by zero
+	je exit
+	div r9
+	mov rcx, rax
+	mov r9, rdx
+	pop rax
+	pop r9
+	cmp rcx, 0
+	jne label_2
+	mov rcx, rax
+	mov rdx, rcx
+	add rdx, r8
+	sub rdx, 1
 	add r8, 1
 	mov rcx, 8
-	push rax
 	push rdx
 	mov rax, r8
 	xor rdx, rdx
 	mul rcx
 	mov r8, rax
 	pop rdx
-	pop rax
 	add r8, 8
 	pop rax
 	sub rsp, r8        ;; reserve space
 	mov r10, rsp
 	mov r9, 0
 	mov r11, rax
-label_1:
+label_3:
 	mov rcx, 10
+	push rax
 	push rax
 	push rdx
 	mov rax, r11
@@ -53,11 +90,16 @@ label_1:
 	mov rcx, rdx
 	pop rdx
 	pop rax
+	pop rax
 	add rcx, 48        ;; convert to char digit
-	mov [r10+r9], rcx
+	push r11
+	mov r11, rdx
+	sub r11, r9
+	mov [r10+r11], cl
 	inc r9
+	pop r11
 	cmp r11, 0
-	jne label_1
+	jne label_3
 	mov rax, r10
 	add rax, r8
 	sub rax, 8
@@ -193,13 +235,16 @@ label_1:
 	syscall
 	mov rbx, 123        ;; init with value
 	;; init string: VAR(b)
-	mov rax, rbx
 	;; int_to_string()
-	push rax
-	mov rdx, rbx
-	mov r8, rdx
+	push rbx
+	mov r8, rbx
 	mov rcx, 100000000
-	push rdx
+	;; log_n(r8, rcx)
+	mov rax, 0
+label_4:
+	inc rax
+	push rcx
+	push rax
 	mov rax, r8
 	xor rdx, rdx
 	cmp rcx, 0        ;; check division by zero
@@ -207,24 +252,57 @@ label_1:
 	div rcx
 	mov r8, rax
 	mov rcx, rdx
-	pop rdx
+	pop rax
+	pop rcx
+	cmp r8, 0
+	jne label_4
+	mov r8, rax
+	sub r8, 1
+	mov rax, rbx
+	xor rdx, rdx
+	cmp rcx, 0        ;; check division by zero
+	je exit
+	div rcx
+	mov rbx, rax
+	mov rcx, rdx
+	mov r9, 10
+	;; log_n(rcx, r9)
+	mov rax, 0
+label_5:
+	inc rax
+	push r9
+	push rax
+	mov rax, rcx
+	xor rdx, rdx
+	cmp r9, 0        ;; check division by zero
+	je exit
+	div r9
+	mov rcx, rax
+	mov r9, rdx
+	pop rax
+	pop r9
+	cmp rcx, 0
+	jne label_5
+	mov rcx, rax
+	mov rdx, rcx
+	add rdx, r8
+	sub rdx, 1
 	add r8, 1
 	mov rcx, 8
-	push rax
 	push rdx
 	mov rax, r8
 	xor rdx, rdx
 	mul rcx
 	mov r8, rax
 	pop rdx
-	pop rax
 	add r8, 8
 	pop rax
+	mov rbx, rax
 	sub rsp, r8        ;; reserve space
 	mov r10, rsp
 	mov r9, 0
 	mov r11, rax
-label_2:
+label_6:
 	mov rcx, 10
 	push rax
 	push rdx
@@ -238,10 +316,14 @@ label_2:
 	pop rdx
 	pop rax
 	add rcx, 48        ;; convert to char digit
-	mov [r10+r9], rcx
+	push r11
+	mov r11, rdx
+	sub r11, r9
+	mov [r10+r11], cl
 	inc r9
+	pop r11
 	cmp r11, 0
-	jne label_2
+	jne label_6
 	mov rax, r10
 	add rax, r8
 	sub rax, 8
