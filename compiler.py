@@ -1,6 +1,5 @@
 import sys
-import string
-from registers import *
+from src.registers import *
 from src.const_names import *
 from src.tokenizer import tokenizer
 from src.parser import Parser, Tree, Node
