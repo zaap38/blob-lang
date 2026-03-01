@@ -1144,13 +1144,10 @@ class CodeGen:
 
         # get length first
         self.move(rcx, 10 ** 8)  # count 8 bytes blocks
-        self.push([rax, rdx])
-        self.div64(r8, rcx)
+        self.pp(self.div64, r8, rcx, [rdx])
         self.add(r8, 1)  # +1 line for the reminder
         self.move(rcx, 8)
-        self.push_clobbered([rax, rcx, rdx, r8, r9, r10], "div64")
-        self.mult(r8, rcx)  # lines for the generated string
-        self.pop_clobbered([rax, rcx, rdx, r8, r9, r10], "div64")
+        self.pp(self.mult, r8, rcx, [rax, rcx, rdx, r9, r10])
         self.add(r8, 8)  # +1 line for the length
 
         self.pop(rax)  # get the content of r1 back
@@ -1163,9 +1160,7 @@ class CodeGen:
 
         lid = self.label()  # while rax > 10
         self.move(rcx, 10)  # used for calculations
-        self.push_clobbered([rax, rdx, r8, r9, r10], "div64")
-        self.div64(r11, rcx)
-        self.pop_clobbered([rax, rdx, r8, r9, r10], "div64")
+        self.pp(self.div64, r11, rcx, [rax, rdx, r8, r9, r10])
         self.add(rcx, "48", "convert to char digit")
         self.move("[" + r10 + "+" + r9 + "]", rcx)
         self.inc(r9)
@@ -1400,7 +1395,7 @@ class CodeGen:
         if type(v) != list:
             v = [v]
         for reg in v:
-            if reg in [rbx, r12, r13, r14, r15]:
+            if reg in reversed([rbx, r12, r13, r14, r15]):
                 self.write("pop " + str(reg) + comment)
                 comment = ""
 
@@ -1418,9 +1413,24 @@ class CodeGen:
         if type(regs) != list:
             regs = [regs]
         for reg in regs:
-            if reg in self.clobbers[f_name]:
+            if reg in reversed(self.clobbers[f_name]):
                 self.write("pop " + str(reg) + comment)
                 comment = ""
+
+    def pp(self, f, r1, r2="", regs=None, comment=""):
+        # wraps the function f with pushçclobbered() and pop_cloberred()
+        assert f.__name__ in self.clobbers
+        f_name = f.__name__
+        if regs is not  None:
+            self.push_clobbered(regs, f_name)
+        if r2 == "":
+            ret_reg = f(r1, comment)
+        else:
+            ret_reg = f(r1, r2, comment)
+        if regs is not  None:
+            self.pop_clobbered(regs, f_name)
+        return ret_reg
+
 
     def push(self, v, comment=""):
         comment = self.make_comment(comment)

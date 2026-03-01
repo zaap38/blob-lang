@@ -15,7 +15,6 @@ main:
 	mov rdx, rax
 	mov r8, rdx
 	mov rcx, 100000000
-	push rax
 	push rdx
 	mov rax, r8
 	xor rdx, rdx
@@ -24,17 +23,16 @@ main:
 	div rcx
 	mov r8, rax
 	mov rcx, rdx
+	pop rdx
 	add r8, 1
 	mov rcx, 8
 	push rax
-	push rcx
 	push rdx
 	mov rax, r8
 	xor rdx, rdx
 	mul rcx
 	mov r8, rax
 	pop rax
-	pop rcx
 	pop rdx
 	add r8, 8
 	pop rax
@@ -201,7 +199,6 @@ label_1:
 	mov rdx, rbx
 	mov r8, rdx
 	mov rcx, 100000000
-	push rax
 	push rdx
 	mov rax, r8
 	xor rdx, rdx
@@ -210,17 +207,16 @@ label_1:
 	div rcx
 	mov r8, rax
 	mov rcx, rdx
+	pop rdx
 	add r8, 1
 	mov rcx, 8
 	push rax
-	push rcx
 	push rdx
 	mov rax, r8
 	xor rdx, rdx
 	mul rcx
 	mov r8, rax
 	pop rax
-	pop rcx
 	pop rdx
 	add r8, 8
 	pop rax
