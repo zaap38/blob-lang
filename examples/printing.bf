@@ -1,6 +1,6 @@
 
 void main() {
-    print(66); print num value
+    print(123); print num value
     print("abcdefghij"); print literal
     string a = "my_string_to_print"
     print(a); print from string var

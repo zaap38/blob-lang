@@ -8,8 +8,8 @@ _start:
 main:
 	;; declaring function main
 	mov rbp, rsp
-	;; init string: NUM(66)
-	mov rax, 66
+	;; init string: NUM(123)
+	mov rax, 123
 	mov rax, rax
 	;; int_to_string()
 	push rax
@@ -25,12 +25,8 @@ main:
 	div rcx
 	mov r8, rax
 	mov rcx, rdx
-	pop rdx
-	pop rax
 	add r8, 1
 	mov rcx, 8
-	push rax
-	push rdx
 	mov rax, r8
 	xor rdx, rdx
 	mul rcx
@@ -211,12 +207,8 @@ label_1:
 	div rcx
 	mov r8, rax
 	mov rcx, rdx
-	pop rdx
-	pop rax
 	add r8, 1
 	mov rcx, 8
-	push rax
-	push rdx
 	mov rax, r8
 	xor rdx, rdx
 	mul rcx

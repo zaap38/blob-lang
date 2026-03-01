@@ -1104,10 +1104,12 @@ class CodeGen:
 
         # get length first
         self.move(rcx, 10 ** 8)  # count 8 bytes blocks
+        self.push([rax, rdx])
         self.div64(r8, rcx)
         self.add(r8, 1)  # +1 line for the reminder
         self.move(rcx, 8)
         self.mult(r8, rcx)  # lines for the generated string
+        self.pop([rax, rdx])
         self.add(r8, 8)  # +1 line for the length
 
         self.pop(rax)  # get the content of r1 back
@@ -1120,7 +1122,9 @@ class CodeGen:
 
         lid = self.label()  # while rax > 10
         self.move(rcx, 10)  # used for calculations
+        self.push([rax, rdx])
         self.div64(r11, rcx)
+        self.pop([rax, rdx])
         self.add(rcx, "48", "convert to char digit")
         self.move("[" + r10 + "+" + r9 + "]", rcx)
         self.inc(r9)
@@ -1197,10 +1201,14 @@ class CodeGen:
         
         self.move(r8, self.at(reg), "load len in r8")
         self.move(r9, 8)
+        self.push([rax, rdx])
         self.div64(r8, r9, "len // 8")
+        self.pop([rax, rdx])
         self.inc(r8)
         self.move(r10, 8)
+        self.push([rax, rdx])
         self.mult(r8, r10)
+        self.pop([rax, rdx])
         self.move(r9, reg)
         self.move(rax, 1, "syscall: write")
         self.move(rdi, 1, "std out")
@@ -1292,20 +1300,15 @@ class CodeGen:
     def mult(self, r1, r2, comment=""):
         comment = self.make_comment(comment)
 
-        self.push([rax, rdx])
-
         self.move(rax, r1)
         self.xor(rdx, rdx)
         self.write("mul " + str(r2) + comment)
         self.move(r1, rax)
-        
-        self.pop([rax, rdx])
 
         return r1
     
     def div64(self, r1, r2, comment=""):
         comment = self.make_comment(comment)
-        self.push([rax, rdx])
 
         self.move(rax, r1)
         self.xor(rdx, rdx)
@@ -1315,7 +1318,6 @@ class CodeGen:
         self.move(r1, rax)
         self.move(r2, rdx)
         
-        self.pop([rax, rdx])
         return r1, r2
     
     def xor(self, r1, r2, comment=""):
