@@ -866,6 +866,44 @@ class CodeGen:
 
         self.current_regs = {}  # [reg] -> vid
 
+        # for each function, list of the regs it overwrites
+        self.clobbers = {}  # [function_name] -> [clobbered regs]
+        self.init_clobbers()
+
+    def init_clobbers(self):
+        self.clobbers["int_to_string"] = [rax, rcx, rdx, r8, r9, r10, r11]
+        self.clobbers["init_string"] = [rax]
+        self.clobbers["gen_lib_print"] = [rax, rdx, r8, r9, r10, rsi]
+        self.clobbers["mult"] = [rax, rdx]
+        self.clobbers["div64"] = [rax, rcx, rdx]
+
+        # filter out regs that do not need to be saved by this function
+        for k in self.clobbers:
+            self.clobbers[k] = filter_caller_saved(self.clobbers[k])
+
+        # closure
+        fuse = {}  # functions called by the key function
+        fuse["int_to_string"] = ["div64", "mult"]
+        fuse["init_string"] = ["int_to_string"]
+        fuse["gen_lib_print"] = ["init_string", "div64", "mult"]
+        
+        changed = True
+        while changed:
+            changed = False
+            for f_name, f_regs in self.clobbers.items():
+                if f_name not in fuse:
+                    continue
+                old_regs_len = len(f_regs)
+                for f_used in fuse[f_name]:
+                    f_regs += self.clobbers[f_used]
+                self.clobbers[f_name] = list(set(f_regs))
+                new_regs_len = len(self.clobbers[f_name])
+                if old_regs_len != new_regs_len:
+                    changed = True
+
+        for k, v in self.clobbers.items():
+            print("Function" + YELLOW, k, ENDCOLOR + "clobbers" + GREEN, v, ENDCOLOR)
+
     def push_scope(self):
         self.scopes.append({})
 
@@ -1091,6 +1129,8 @@ class CodeGen:
             self.syscall()
 
     def int_to_string(self, r1):
+        # use [rax, rcx, rdx, r8, r9, r10, r11]
+        # fuse [div64, mult]
         # return in rax an address to the generated string
 
         self.move(rax, r1)
@@ -1108,8 +1148,9 @@ class CodeGen:
         self.div64(r8, rcx)
         self.add(r8, 1)  # +1 line for the reminder
         self.move(rcx, 8)
+        self.push_clobbered([rax, rcx, rdx, r8, r9, r10], "div64")
         self.mult(r8, rcx)  # lines for the generated string
-        self.pop([rax, rdx])
+        self.pop_clobbered([rax, rcx, rdx, r8, r9, r10], "div64")
         self.add(r8, 8)  # +1 line for the length
 
         self.pop(rax)  # get the content of r1 back
@@ -1122,9 +1163,9 @@ class CodeGen:
 
         lid = self.label()  # while rax > 10
         self.move(rcx, 10)  # used for calculations
-        self.push([rax, rdx])
+        self.push_clobbered([rax, rdx, r8, r9, r10], "div64")
         self.div64(r11, rcx)
-        self.pop([rax, rdx])
+        self.pop_clobbered([rax, rdx, r8, r9, r10], "div64")
         self.add(rcx, "48", "convert to char digit")
         self.move("[" + r10 + "+" + r9 + "]", rcx)
         self.inc(r9)
@@ -1139,7 +1180,9 @@ class CodeGen:
 
         return rax
 
-    def init_string(self, node):
+    def init_string(self, node: Node):
+        # use [rax]
+        # fuse [int_to_string, mult]
         # save a string in memory and return a pointer to it
         self.comment("init string: " + node.kind + "(" + node.value + ")")
         text = ""
@@ -1150,7 +1193,6 @@ class CodeGen:
             return self.int_to_string(self.color(node))
         else:
             text = node.value
-        # self.move(rsp, rbp)
         padding = 8 - (len(text)) % 8
         self.sub(rsp, 8 + len(text) + padding)
         self.move("[" + rbp + "-8]", len(text), "string size")
@@ -1175,7 +1217,6 @@ class CodeGen:
             return head + str(node.offset) + "]"
         return head + "]"
 
-
     def get_target(self, node: Node, is_init: bool = False):
         reg = self.colors[node.vid]
         if node.vid not in self.colors:  # if var is spilled
@@ -1189,6 +1230,9 @@ class CodeGen:
         return reg
 
     def gen_lib_print(self, node: Node):
+        # use [rax, rdx, r8, r9, r10, rsi]
+        # fuse [init_string, div64, mult]
+        # print in stdout
         child = node.children[0]
         reg = ""
         if child.kind == VAR:
@@ -1289,7 +1333,9 @@ class CodeGen:
 
     def move(self, r1, r2, comment=""):
         comment = self.make_comment(comment)
-        self.write("mov " + str(r1) + ", " + str(r2) + comment)
+        assert r1 != "rip"
+        if r1 != r2:  # skip useless move to self
+            self.write("mov " + str(r1) + ", " + str(r2) + comment)
         return r1
 
     def add(self, r1, r2, comment=""):
@@ -1298,6 +1344,8 @@ class CodeGen:
         return r1
     
     def mult(self, r1, r2, comment=""):
+        # use [rax, rdx]
+        # store result in r1
         comment = self.make_comment(comment)
 
         self.move(rax, r1)
@@ -1308,14 +1356,22 @@ class CodeGen:
         return r1
     
     def div64(self, r1, r2, comment=""):
+        # use [rax, rcx, rdx]
+        # r1 divided by r2 -> quotient in r1 and reminder in r2
+
         comment = self.make_comment(comment)
 
-        self.move(rax, r1)
+        if r1 != rax:
+            self.move(rax, r1)
+        div_reg = r2
+        if r2 == rdx:
+            div_reg = self.move(rcx, r2, "move divisor reg from rdx as rdx will be zero-ed")
         self.xor(rdx, rdx)
-        self.cmp(r2, 0, "check division by zero")
+        self.cmp(div_reg, 0, "check division by zero")
         self.jump("exit", "!=")
-        self.write("div " + r2 + comment)
-        self.move(r1, rax)
+        self.write("div " + div_reg + comment)
+        if r1 != rax:
+            self.move(r1, rax)
         self.move(r2, rdx)
         
         return r1, r2
@@ -1345,6 +1401,24 @@ class CodeGen:
             v = [v]
         for reg in v:
             if reg in [rbx, r12, r13, r14, r15]:
+                self.write("pop " + str(reg) + comment)
+                comment = ""
+
+    def push_clobbered(self, regs, f_name, comment=""):
+        comment = self.make_comment(comment)
+        if type(regs) != list:
+            regs = [regs]
+        for reg in regs:
+            if reg in self.clobbers[f_name]:
+                self.write("push " + str(reg) + comment)
+                comment = ""
+    
+    def pop_clobbered(self, regs, f_name, comment=""):
+        comment = self.make_comment(comment)
+        if type(regs) != list:
+            regs = [regs]
+        for reg in regs:
+            if reg in self.clobbers[f_name]:
                 self.write("pop " + str(reg) + comment)
                 comment = ""
 

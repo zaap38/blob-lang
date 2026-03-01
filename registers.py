@@ -18,3 +18,11 @@ r12 = "r12"    # callee-saved
 r13 = "r13"    # callee-saved
 r14 = "r14"    # callee-saved
 r15 = "r15"    # callee-saved
+
+
+def filter_callee_saved(regs):
+    return [reg for reg in regs if reg in [rbp, rbx, r12, r13, r14, r15]]
+
+
+def filter_caller_saved(regs):
+    return [reg for reg in regs if reg in [rax, rcx, rdx, r8, r9, r10, r11, rsi, rdi]]
