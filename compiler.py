@@ -373,19 +373,26 @@ class CodeGen:
 
         return rax
 
-    def init_string(self, node: Node):
+    def init_string(self, node: Node|str):
         # use [rax]
         # fuse [int_to_string, mult]
         # save a string in memory and return a pointer to it
-        self.comment("init string: " + node.kind + "(" + node.value + ")")
+        extra_text = ""
+        if type(node) == Node:
+            extra_text = node.kind + "(" + node.value + ")"
+        self.comment("init string: " + extra_text)
         text = ""
-        if node.kind == NUM:
-            self.move(rax, node.value)
-            return self.int_to_string(rax)
-        elif node.kind == VAR:
-            return self.int_to_string(self.color(node))
+        # give directly a register instead of a node
+        if type(node) == str:
+            return self.int_to_string(node)
         else:
-            text = node.value
+            if node.kind == NUM:
+                self.move(rax, node.value)
+                return self.int_to_string(rax)
+            elif node.kind == VAR:
+                return self.int_to_string(self.color(node))
+            else:
+                text = node.value
         padding = 8 - (len(text)) % 8
         self.sub(rsp, 8 + len(text) + padding)
         self.move("[" + rbp + "-8]", len(text), "string size")
@@ -433,11 +440,14 @@ class CodeGen:
 
         child = node.children[0]
         reg = ""
+
         if child.kind == VAR:
             if self.var_type[child.vid] != "string":
                 reg = self.init_string(child)
             else:
-                reg = self.color(child)
+                reg = self.init_string(self.color(child))
+        elif child.kind in [BOP, CALL]:
+            reg = self.init_string(self.gen_node(child))
         else:
             reg = self.init_string(child)
         
@@ -465,6 +475,11 @@ class CodeGen:
         pass
 
     def gen_bop(self, node: Node):
+
+        # known issue:
+        # reg writing isnt safe think. Probably it overwrites some
+        # set registers
+
         self.comment("binop '" + node.value + "'")
         left = node.children[0]
         right = node.children[1]

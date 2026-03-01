@@ -6,4 +6,7 @@ void main() {
     print(a); print from string var
     int b = 123
     print(b)
+    int c = 2
+    int d = 3
+    print(c + d)
 }
